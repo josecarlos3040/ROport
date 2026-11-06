@@ -144,13 +144,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 129052039}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
   m_LocalPosition: {x: 2.78836, y: 0.73346, z: 4.6416}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 1801470857}
-  m_Father: {fileID: 0}
+  m_Father: {fileID: 1326919195}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &129052041
 MonoBehaviour:
@@ -167,18 +167,19 @@ MonoBehaviour:
   topDownCamera: {fileID: 330585545}
   player: {fileID: 1986707013}
   routeLine: {fileID: 1801470856}
+  roadNetwork: {fileID: 163085304}
   roadMask:
     serializedVersion: 2
     m_Bits: 64
   obstacleMask:
     serializedVersion: 2
     m_Bits: 128
-  minimumPointDistance: 0.3
-  sampleStep: 0.35
   startRadius: 1.5
+  startingNodeRadius: 1
+  snapRadius: 3.4
   obstacleClearance: 0.35
+  maxNodes: 300
   lineHeight: 0.15
-  maxPoints: 600
 --- !u!1 &163085302
 GameObject:
   m_ObjectHideFlags: 0
@@ -188,6 +189,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 163085303}
+  - component: {fileID: 163085304}
   m_Layer: 6
   m_Name: Roads
   m_TagString: Untagged
@@ -212,6 +214,21 @@ Transform:
   - {fileID: 557688555}
   m_Father: {fileID: 917833056}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &163085304
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 163085302}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0e7ced5f896a042469b6b439f641983a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::RoadNetwork
+  nodeSpacing: 2
+  roadSegments: []
+  showGizmos: 1
 --- !u!1 &233408705
 GameObject:
   m_ObjectHideFlags: 0
@@ -630,6 +647,7 @@ GameObject:
   - component: {fileID: 557688558}
   - component: {fileID: 557688557}
   - component: {fileID: 557688556}
+  - component: {fileID: 557688559}
   m_Layer: 6
   m_Name: Road_Vertical
   m_TagString: Untagged
@@ -730,6 +748,19 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 557688554}
   m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!114 &557688559
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 557688554}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d53e8d27faa429d4d9c19f229aad08d6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::RoadSegment
+  axis: 1
 --- !u!1 &759449879
 GameObject:
   m_ObjectHideFlags: 0
@@ -1110,6 +1141,7 @@ GameObject:
   - component: {fileID: 1164261188}
   - component: {fileID: 1164261187}
   - component: {fileID: 1164261186}
+  - component: {fileID: 1164261189}
   m_Layer: 6
   m_Name: Road_Horizontal
   m_TagString: Untagged
@@ -1210,6 +1242,19 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1164261184}
   m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!114 &1164261189
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1164261184}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d53e8d27faa429d4d9c19f229aad08d6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::RoadSegment
+  axis: 0
 --- !u!1 &1167683099
 GameObject:
   m_ObjectHideFlags: 0
@@ -1458,12 +1503,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1326919194}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -0, y: 0, z: -0}
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 233408706}
+  - {fileID: 129052040}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1692907035
@@ -1619,7 +1665,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1801470857}
   - component: {fileID: 1801470856}
-  m_Layer: 0
+  m_Layer: 7
   m_Name: RouteVisual
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -1680,7 +1726,7 @@ LineRenderer:
   - {x: 0, y: 0, z: 0}
   m_Parameters:
     serializedVersion: 3
-    widthMultiplier: 1
+    widthMultiplier: 0.5
     widthCurve:
       serializedVersion: 2
       m_Curve:
@@ -2133,9 +2179,8 @@ SceneRoots:
   - {fileID: 330585546}
   - {fileID: 410087041}
   - {fileID: 832575519}
-  - {fileID: 1326919195}
   - {fileID: 917833056}
   - {fileID: 1986707013}
-  - {fileID: 129052040}
+  - {fileID: 1326919195}
   - {fileID: 1831143598}
   - {fileID: 523008051}
