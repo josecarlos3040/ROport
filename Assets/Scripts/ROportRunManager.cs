@@ -16,7 +16,6 @@ public class ROportRunManager : MonoBehaviour
     [SerializeField] private RouteFollower routeFollower;
     [SerializeField] private TMP_Text statusText;
 
-
     private readonly PlanningState planning = new PlanningState();
     private readonly ExecutingState executing = new ExecutingState();
     private readonly FinishedState finished = new FinishedState();
@@ -32,6 +31,9 @@ public class ROportRunManager : MonoBehaviour
 
         if (routeDrawer != null)
             routeDrawer.RouteChanged += OnRouteChanged;
+
+        if (routeDrawer != null)
+            routeDrawer.Feedback += OnRouteFeedback;
     }
 
     private void Start()
@@ -68,6 +70,9 @@ public class ROportRunManager : MonoBehaviour
 
         if (routeDrawer != null)
             routeDrawer.RouteChanged -= OnRouteChanged;
+
+        if (routeDrawer != null)
+            routeDrawer.Feedback -= OnRouteFeedback;
     }
 
     public void ResetRun()
@@ -97,8 +102,14 @@ public class ROportRunManager : MonoBehaviour
             return;
 
         statusText.text = totalPoints >= 2
-            ? "Rota pronta! ESPAÇO: executar | R: limpar"
-            : "Clique perto do personagem e arraste para desenhar a rota";
+            ? "Rota pronta! ESPACO: executar | Botao direito: limpar"
+            : "Arraste do personagem/ultima ponta. Espaco: executar | Clique direito: limpar";
+    }
+
+    private void OnRouteFeedback(string message)
+    {
+        if (Phase == RunPhase.Planning)
+            ShowMessage(message);
     }
 
     private void ShowMessage(string message)
@@ -125,7 +136,7 @@ public class ROportRunManager : MonoBehaviour
         public void Enter(ROportRunManager context)
         {
             context.routeDrawer.SetEditable(true);
-            context.ShowMessage("Clique perto do personagem e arraste. ESPAÇO: executar | R: limpar");
+            context.ShowMessage("Arraste do personagem/ultima ponta. ESPACO: executar | Botao direito: limpar");
         }
 
         public void Tick(ROportRunManager context)
