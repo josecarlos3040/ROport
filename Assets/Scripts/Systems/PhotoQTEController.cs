@@ -8,6 +8,7 @@ public class PhotoQTEController : MonoBehaviour
 {
     [Header("References")]
     [SerializeField] private Transform player;
+    [SerializeField] private RouteFollower routeFollower;
     [SerializeField] private ROportRunManager runManager;
     [SerializeField] private CityProgressManager cityProgressManager;
 
@@ -21,19 +22,22 @@ public class PhotoQTEController : MonoBehaviour
     [Header("QTE UI")]
     [SerializeField] private GameObject qtePanel;
     [SerializeField] private TMP_Text qteText;
+
+    // Use Image OU Slider, dependendo da sua UI.
     [SerializeField] private Image timeBar;
+    [SerializeField] private Slider timeSlider;
+
     [SerializeField] private TMP_Text feedbackText;
 
-    [Header("QTE Settings")]
-    [SerializeField, Min(0.1f)]
-    private float qteDuration = 1.8f;
-
+    [Header("Feedback")]
     [SerializeField, Min(0.1f)]
     private float feedbackDuration = 2f;
 
     private CityProblem currentProblem;
 
-    private float timeRemaining;
+    // Tempo total disponível ao iniciar o QTE.
+    private float initialTime;
+
     private float feedbackRemaining;
 
     private readonly HashSet<CityProblem> failedThisRun =
@@ -45,6 +49,7 @@ public class PhotoQTEController : MonoBehaviour
             gameplayCamera = Camera.main;
 
         HideQTE();
+        SetBarProgress(1f);
 
         if (feedbackText != null)
             feedbackText.text = "";
@@ -69,6 +74,7 @@ public class PhotoQTEController : MonoBehaviour
         UpdateFeedback();
 
         if (player == null ||
+            routeFollower == null ||
             runManager == null ||
             cityProgressManager == null)
         {
@@ -76,6 +82,7 @@ public class PhotoQTEController : MonoBehaviour
             return;
         }
 
+        // O QTE só existe durante a execução.
         if (runManager.Phase != RunPhase.Executing)
         {
             HideQTE();
@@ -84,13 +91,21 @@ public class PhotoQTEController : MonoBehaviour
 
         if (currentProblem != null)
         {
-            if (!currentProblem.CanPhotograph ||
-                !currentProblem.IsPlayerNear(player.position))
+            if (!currentProblem.CanPhotograph)
             {
                 HideQTE();
+                return;
+            }
+
+            // Sair do raio encerra a oportunidade.
+            if (!currentProblem.IsPlayerNear(player.position))
+            {
+                FailQTE();
+                return;
             }
         }
 
+        // Procura um problema se não houver QTE ativo.
         if (currentProblem == null)
         {
             CityProblem nearby = FindNearbyProblem();
@@ -102,28 +117,47 @@ public class PhotoQTEController : MonoBehaviour
         if (currentProblem == null)
             return;
 
-        // Mantém a interface perto do problema.
         UpdateQTEWorldPosition();
 
+        // Calcula o percurso restante dentro da área.
+        float remainingDistance =
+            routeFollower.GetRemainingDistanceInsideProblem(
+                currentProblem);
+
+        if (remainingDistance <= 0.001f)
+        {
+            FailQTE();
+            return;
+        }
+
+        float remainingTime =
+            remainingDistance / routeFollower.MovementSpeed;
+
+        // A barra representa a fração do tempo restante.
+        float progress = Mathf.Clamp01(
+            remainingTime / initialTime);
+
+        // Se o personagem estiver bloqueado,
+        // a barra representa a ultima oportunidade.
+        if (routeFollower.IsBlocked)
+        {
+            progress = Mathf.Clamp01(
+                routeFollower.BlockTimeRemaining /
+                routeFollower.BlockWaitDuration);
+        }
+
+        SetBarProgress(progress);
+
+        SetBarProgress(progress);
+
+        // Fotografa somente enquanto ainda há tempo.
         Keyboard keyboard = Keyboard.current;
 
         if (keyboard != null &&
             keyboard.eKey.wasPressedThisFrame)
         {
             TryTakePhoto();
-            return;
         }
-
-        timeRemaining -= Time.deltaTime;
-
-        if (timeBar != null)
-        {
-            timeBar.fillAmount = Mathf.Clamp01(
-                timeRemaining / qteDuration);
-        }
-
-        if (timeRemaining <= 0f)
-            FailQTE();
     }
 
     private CityProblem FindNearbyProblem()
@@ -160,8 +194,23 @@ public class PhotoQTEController : MonoBehaviour
 
     private void StartQTE(CityProblem problem)
     {
+        float distance =
+            routeFollower.GetRemainingDistanceInsideProblem(
+                problem);
+
+        // Não inicia se não houver tempo útil na rota.
+        if (distance <= 0.001f)
+        {
+            failedThisRun.Add(problem);
+            return;
+        }
+
         currentProblem = problem;
-        timeRemaining = qteDuration;
+
+        initialTime =
+            distance / routeFollower.MovementSpeed;
+
+        SetBarProgress(1f);
 
         UpdateQTEWorldPosition();
 
@@ -176,13 +225,27 @@ public class PhotoQTEController : MonoBehaviour
                 "\n[E]";
         }
 
-        if (timeBar != null)
-            timeBar.fillAmount = 1f;
-
-        Debug.Log("[ROport] QTE iniciado: " + problem.DisplayName);
+        Debug.Log(
+            "[ROport] QTE iniciado. Tempo disponível: " +
+            initialTime.ToString("F2") + "s");
     }
 
-    // NOVO: posiciona o QTE no mundo 3D.
+    
+    private void SetBarProgress(float progress)
+    {
+        progress = Mathf.Clamp01(progress);
+
+        if (timeBar != null)
+            timeBar.fillAmount = progress;
+
+        if (timeSlider != null)
+        {
+            timeSlider.minValue = 0f;
+            timeSlider.maxValue = 1f;
+            timeSlider.SetValueWithoutNotify(progress);
+        }
+    }
+
     private void UpdateQTEWorldPosition()
     {
         if (currentProblem == null ||
@@ -194,10 +257,9 @@ public class PhotoQTEController : MonoBehaviour
 
         Transform canvasTransform = worldQTECanvas.transform;
 
-        // Altura em relação à rua.
-        Vector3 heightOffset = Vector3.up * worldHeight;
+        Vector3 heightOffset =
+            Vector3.up * worldHeight;
 
-        // Direção que representa "cima" na tela.
         Vector3 screenOffset =
             gameplayCamera.transform.up * screenUpOffset;
 
@@ -206,7 +268,6 @@ public class PhotoQTEController : MonoBehaviour
             heightOffset +
             screenOffset;
 
-        // O painel acompanha a orientação da câmera.
         canvasTransform.rotation =
             gameplayCamera.transform.rotation;
     }
@@ -246,7 +307,7 @@ public class PhotoQTEController : MonoBehaviour
     private void HideQTE()
     {
         currentProblem = null;
-        timeRemaining = 0f;
+        initialTime = 0f;
 
         if (qtePanel != null)
             qtePanel.SetActive(false);
@@ -267,8 +328,11 @@ public class PhotoQTEController : MonoBehaviour
 
         feedbackRemaining -= Time.deltaTime;
 
-        if (feedbackRemaining <= 0f && feedbackText != null)
+        if (feedbackRemaining <= 0f &&
+            feedbackText != null)
+        {
             feedbackText.text = "";
+        }
     }
 
     private void OnPhaseChanged(RunPhase phase)

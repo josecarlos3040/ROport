@@ -4,8 +4,6 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.EventSystems;
 
-// Desenha no grafo de ruas: sem diagonais, com retorno para apagar a ponta.
-// Arraste a partir do jogador (ou da ponta da rota existente).
 public class RouteDrawer : MonoBehaviour
 {
     [Header("References")]
@@ -19,16 +17,34 @@ public class RouteDrawer : MonoBehaviour
     [SerializeField] private LayerMask obstacleMask;
 
     [Header("Drawing")]
-    [SerializeField, Min(0.1f)] private float startRadius = 1.75f;
-    [SerializeField, Min(0.1f)] private float startingNodeRadius = 1f;
-    [SerializeField, Min(0.1f)] private float snapRadius = 3.4f;
-    [SerializeField, Min(0.1f)] private float obstacleClearance = 0.45f;
-    [SerializeField, Min(2)] private int maxNodes = 300;
-    [SerializeField] private float lineHeight = 0.2f;
+    [SerializeField, Min(0.1f)]
+    private float startRadius = 1.75f;
 
-    private readonly List<Vector3> points = new List<Vector3>();
-    private readonly List<int> routeNodes = new List<int>();
-    private readonly HashSet<int> visitedNodes = new HashSet<int>();
+    [SerializeField, Min(0.1f)]
+    private float startingNodeRadius = 1.35f;
+
+    [SerializeField, Min(0.1f)]
+    private float snapRadius = 3.4f;
+
+    //[SerializeField, Min(0.1f)]
+    //private float obstacleClearance = 0.45f;
+
+    [SerializeField, Min(2)]
+    private int maxNodes = 300;
+
+    [SerializeField]
+    private float lineHeight = 0.2f;
+
+    private readonly List<Vector3> points =
+        new List<Vector3>();
+
+    private readonly List<int> routeNodes =
+        new List<int>();
+
+    private readonly HashSet<int> visitedNodes =
+        new HashSet<int>();
+
+    private float characterHeightOffset;
 
     private bool isDrawing;
     private bool canEdit;
@@ -36,12 +52,15 @@ public class RouteDrawer : MonoBehaviour
 
     public IReadOnlyList<Vector3> Points => points;
     public bool HasRoute => points.Count >= 2;
+
     public event Action<int> RouteChanged;
     public event Action<string> Feedback;
 
     private void Awake()
     {
-        if (topDownCamera == null) topDownCamera = Camera.main;
+        if (topDownCamera == null)
+            topDownCamera = Camera.main;
+
         if (routeLine != null)
         {
             routeLine.useWorldSpace = true;
@@ -52,9 +71,15 @@ public class RouteDrawer : MonoBehaviour
     private void Update()
     {
         Mouse mouse = Mouse.current;
-        if (!canEdit || mouse == null || player == null ||
-            topDownCamera == null || roadNetwork == null)
+
+        if (!canEdit ||
+            mouse == null ||
+            player == null ||
+            topDownCamera == null ||
+            roadNetwork == null)
+        {
             return;
+        }
 
         if (mouse.rightButton.wasPressedThisFrame)
         {
@@ -64,9 +89,11 @@ public class RouteDrawer : MonoBehaviour
 
         if (mouse.leftButton.wasPressedThisFrame)
         {
-            // Evita começar desenhando em cima de botões da interface.
-            if (EventSystem.current == null || !EventSystem.current.IsPointerOverGameObject())
+            if (EventSystem.current == null ||
+                !EventSystem.current.IsPointerOverGameObject())
+            {
                 BeginDrawing();
+            }
         }
 
         if (isDrawing && mouse.leftButton.isPressed)
@@ -79,27 +106,47 @@ public class RouteDrawer : MonoBehaviour
     public void SetEditable(bool editable)
     {
         canEdit = editable;
-        if (!editable) isDrawing = false;
+
+        if (!editable)
+            isDrawing = false;
     }
 
     public void ClearRoute()
     {
         isDrawing = false;
+
         points.Clear();
         routeNodes.Clear();
         visitedNodes.Clear();
+
         lastFeedback = null;
 
-        if (player != null && roadNetwork != null &&
-            roadNetwork.TryFindNearestNode(player.position, startingNodeRadius, out int startNode))
+        if (player != null &&
+            roadNetwork != null &&
+            roadNetwork.TryFindNearestNode(
+                player.position,
+                startingNodeRadius,
+                out int startId))
         {
-            routeNodes.Add(startNode);
-            visitedNodes.Add(startNode);
-            points.Add(roadNetwork.GetWorldPosition(startNode, player.position.y));
+            routeNodes.Add(startId);
+            visitedNodes.Add(startId);
+
+            // Distancia vertical entre a superficie
+            // da rua e o pivot do personagem.
+            characterHeightOffset =
+                player.position.y -
+                roadNetwork.GetWorldPosition(startId).y;
+
+            points.Add(
+                roadNetwork.GetWorldPosition(startId) +
+                Vector3.up * characterHeightOffset);
         }
         else
         {
-            Debug.LogError("ROport: o Player deve comecar em cima do centro de uma rua do RoadNetwork.", this);
+            Debug.LogError(
+                "ROport: Player muito longe de um no do " +
+                "RoadNetwork. Ajuste Starting Node Radius.",
+                this);
         }
 
         RefreshLine();
@@ -108,13 +155,22 @@ public class RouteDrawer : MonoBehaviour
 
     private void BeginDrawing()
     {
-        if (routeNodes.Count == 0 || !TryGetRoadPoint(out Vector3 mousePoint))
-            return;
-
-        Vector3 last = points[points.Count - 1];
-        if (FlatDistance(last, mousePoint) > startRadius)
+        if (routeNodes.Count == 0 ||
+            !TryGetRoadPoint(out Vector3 mousePoint))
         {
-            ShowFeedback("Comece pelo personagem ou pela ultima ponta da rota.");
+            return;
+        }
+
+        Vector3 lastSurface =
+            roadNetwork.GetWorldPosition(
+                routeNodes[routeNodes.Count - 1]);
+
+        if (Vector3.Distance(lastSurface, mousePoint)
+            > startRadius)
+        {
+            ShowFeedback(
+                "Comece pelo personagem ou pela " +
+                "ultima ponta da rota.");
             return;
         }
 
@@ -123,12 +179,17 @@ public class RouteDrawer : MonoBehaviour
 
     private void ContinueDrawing()
     {
-        if (!TryGetRoadPoint(out Vector3 mousePoint) || routeNodes.Count == 0)
+        if (!TryGetRoadPoint(out Vector3 mousePoint) ||
+            routeNodes.Count == 0)
+        {
             return;
+        }
 
-        // Aproxima o ponto do mouse a um ponto real da malha de ruas.
-        if (!roadNetwork.TryFindNearestNode(mousePoint, snapRadius, out _))
+        if (!roadNetwork.TryFindNearestNode(
+            mousePoint, snapRadius, out _))
+        {
             return;
+        }
 
         ExtendToward(mousePoint);
     }
@@ -136,19 +197,29 @@ public class RouteDrawer : MonoBehaviour
     private bool TryGetRoadPoint(out Vector3 point)
     {
         point = Vector3.zero;
-        Vector2 position = Mouse.current.position.ReadValue();
-        Ray ray = topDownCamera.ScreenPointToRay(new Vector3(position.x, position.y, 0f));
 
-        int combinedMask = roadMask.value | obstacleMask.value;
-        if (!Physics.Raycast(ray, out RaycastHit hit, 250f, combinedMask,
-                QueryTriggerInteraction.Ignore))
+        if (Mouse.current == null || topDownCamera == null)
             return false;
 
-        if ((roadMask.value & (1 << hit.collider.gameObject.layer)) == 0)
+        Vector2 mousePosition =
+            Mouse.current.position.ReadValue();
+
+        Ray ray = topDownCamera.ScreenPointToRay(
+            new Vector3(mousePosition.x, mousePosition.y, 0f));
+
+        // Detecta somente as ruas.
+        // Obstaculos nao impedem o desenho.
+        if (!Physics.Raycast(
+            ray,
+            out RaycastHit hit,
+            250f,
+            roadMask.value,
+            QueryTriggerInteraction.Ignore))
+        {
             return false;
+        }
 
         point = hit.point;
-        point.y = player.position.y; // mesma altura usada pelo RouteFollower
         return true;
     }
 
@@ -157,28 +228,38 @@ public class RouteDrawer : MonoBehaviour
         bool changed = false;
         bool blockedByVisited = false;
 
-        // Cada iteracao avanca OU apaga um no, para acompanhar o mouse
-        // mesmo quando ele se move rapidamente entre dois frames.
         for (int step = 0; step < maxNodes; step++)
         {
             int lastIndex = routeNodes.Count - 1;
             int lastId = routeNodes[lastIndex];
-            int previousId = lastIndex > 0 ? routeNodes[lastIndex - 1] : -1;
 
-            Vector3 from = roadNetwork.GetWorldPosition(lastId, player.position.y);
-            float currentDistance = (target - from).sqrMagnitude;
+            int previousId = lastIndex > 0
+                ? routeNodes[lastIndex - 1]
+                : -1;
+
+            Vector3 from =
+                roadNetwork.GetWorldPosition(lastId);
+
+            float currentDistance =
+                (target - from).sqrMagnitude;
 
             int bestNeighbor = -1;
             float bestDistance = currentDistance - 0.001f;
 
-            foreach (int neighborId in roadNetwork.GetNeighbors(lastId))
+            foreach (int neighborId
+                in roadNetwork.GetNeighbors(lastId))
             {
-                Vector3 to = roadNetwork.GetWorldPosition(neighborId, player.position.y);
-                float distance = (target - to).sqrMagnitude;
-                if (distance >= bestDistance) continue;
+                Vector3 to =
+                    roadNetwork.GetWorldPosition(neighborId);
 
-                // O unico no visitado permitido e o penultimo ponto:
-                // voltar por ele apaga o ultimo trecho da rota.
+                float distance =
+                    (target - to).sqrMagnitude;
+
+                if (distance >= bestDistance)
+                    continue;
+
+                // Voltar ao penultimo no apaga
+                // o ultimo segmento da linha.
                 if (neighborId == previousId)
                 {
                     bestDistance = distance;
@@ -186,29 +267,30 @@ public class RouteDrawer : MonoBehaviour
                     continue;
                 }
 
-                // Proibe cruzar a propria rota ou revisitar outro no.
+                // Nao permite cruzar a propria rota.
                 if (visitedNodes.Contains(neighborId))
                 {
                     blockedByVisited = true;
                     continue;
                 }
 
-                // Mesmo com rota cheia, apagar pelo mouse continua permitido.
-                if (routeNodes.Count >= maxNodes) continue;
-
-                if (Physics.CheckCapsule(from, to, obstacleClearance,
-                        obstacleMask.value, QueryTriggerInteraction.Ignore))
+                if (routeNodes.Count >= maxNodes)
                     continue;
+
+                // Verifica obstaculos na altura
+                // percorrida pelo personagem.
+
 
                 bestDistance = distance;
                 bestNeighbor = neighborId;
             }
 
-            if (bestNeighbor < 0) break;
+            if (bestNeighbor < 0)
+                break;
 
             if (bestNeighbor == previousId)
             {
-                // Remove somente a ponta: o restante do caminho permanece.
+                // Apagamento progressivo.
                 routeNodes.RemoveAt(lastIndex);
                 points.RemoveAt(lastIndex);
                 visitedNodes.Remove(lastId);
@@ -217,7 +299,10 @@ public class RouteDrawer : MonoBehaviour
             {
                 routeNodes.Add(bestNeighbor);
                 visitedNodes.Add(bestNeighbor);
-                points.Add(roadNetwork.GetWorldPosition(bestNeighbor, player.position.y));
+
+                points.Add(
+                    roadNetwork.GetWorldPosition(bestNeighbor) +
+                    Vector3.up * characterHeightOffset);
             }
 
             changed = true;
@@ -226,37 +311,44 @@ public class RouteDrawer : MonoBehaviour
         if (changed)
         {
             lastFeedback = null;
+
             RefreshLine();
             RouteChanged?.Invoke(points.Count);
         }
         else if (blockedByVisited)
         {
-            ShowFeedback("Essa rua ja foi usada. Volte pela ponta da linha para apagar.");
+            ShowFeedback(
+                "Essa rua ja foi usada. " +
+                "Volte pela ponta para apagar.");
         }
     }
 
     private void ShowFeedback(string message)
     {
-        if (lastFeedback == message) return;
+        if (lastFeedback == message)
+            return;
+
         lastFeedback = message;
         Feedback?.Invoke(message);
     }
 
-    private static float FlatDistance(Vector3 a, Vector3 b)
-    {
-        a.y = b.y = 0f;
-        return Vector3.Distance(a, b);
-    }
-
     private void RefreshLine()
     {
-        if (routeLine == null) return;
+        if (routeLine == null)
+            return;
 
-        routeLine.positionCount = points.Count;
-        Vector3[] linePositions = new Vector3[points.Count];
-        for (int i = 0; i < points.Count; i++)
-            linePositions[i] = new Vector3(points[i].x, lineHeight, points[i].z);
-        routeLine.SetPositions(linePositions);
+        routeLine.positionCount = routeNodes.Count;
+
+        Vector3[] positions =
+            new Vector3[routeNodes.Count];
+
+        for (int i = 0; i < routeNodes.Count; i++)
+        {
+            positions[i] =
+                roadNetwork.GetWorldPosition(routeNodes[i]) +
+                Vector3.up * lineHeight;
+        }
+
+        routeLine.SetPositions(positions);
     }
 }
- 
