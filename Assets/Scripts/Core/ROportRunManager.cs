@@ -12,6 +12,7 @@ public enum RunPhase
 
 public class ROportRunManager : MonoBehaviour
 {
+    [Header("References")]
     [SerializeField] private RouteDrawer routeDrawer;
     [SerializeField] private RouteFollower routeFollower;
     [SerializeField] private TMP_Text statusText;
@@ -19,9 +20,12 @@ public class ROportRunManager : MonoBehaviour
     private readonly PlanningState planning = new PlanningState();
     private readonly ExecutingState executing = new ExecutingState();
     private readonly FinishedState finished = new FinishedState();
+
     private IRunState currentState;
 
-    public RunPhase Phase => currentState == null ? RunPhase.Planning : currentState.Phase;
+    public RunPhase Phase =>
+        currentState != null ? currentState.Phase : RunPhase.Planning;
+
     public event Action<RunPhase> PhaseChanged;
 
     private void Awake()
@@ -30,17 +34,20 @@ public class ROportRunManager : MonoBehaviour
             routeFollower.Completed += OnRouteCompleted;
 
         if (routeDrawer != null)
+        {
             routeDrawer.RouteChanged += OnRouteChanged;
-
-        if (routeDrawer != null)
             routeDrawer.Feedback += OnRouteFeedback;
+        }
     }
 
     private void Start()
     {
         if (routeDrawer == null || routeFollower == null)
         {
-            Debug.LogError("ROport: ligue RouteDrawer e RouteFollower no Inspector.");
+            Debug.LogError(
+                "[ROport] Configure RouteDrawer e RouteFollower.",
+                this);
+
             enabled = false;
             return;
         }
@@ -51,6 +58,7 @@ public class ROportRunManager : MonoBehaviour
     private void Update()
     {
         Keyboard keyboard = Keyboard.current;
+
         if (keyboard == null)
             return;
 
@@ -60,7 +68,7 @@ public class ROportRunManager : MonoBehaviour
             return;
         }
 
-        currentState?.Tick(this);
+        currentState?.HandleInput(this, keyboard);
     }
 
     private void OnDestroy()
@@ -69,24 +77,31 @@ public class ROportRunManager : MonoBehaviour
             routeFollower.Completed -= OnRouteCompleted;
 
         if (routeDrawer != null)
+        {
             routeDrawer.RouteChanged -= OnRouteChanged;
-
-        if (routeDrawer != null)
             routeDrawer.Feedback -= OnRouteFeedback;
+        }
     }
 
     public void ResetRun()
     {
+        if (routeFollower == null || routeDrawer == null)
+            return;
+
         routeFollower.ResetFollower();
         routeDrawer.ClearRoute();
+
         ChangeState(planning);
     }
 
-    private void ChangeState(IRunState next)
+    private void ChangeState(IRunState nextState)
     {
-        currentState?.Exit(this);
-        currentState = next;
+        if (nextState == null)
+            return;
+
+        currentState = nextState;
         currentState.Enter(this);
+
         PhaseChanged?.Invoke(currentState.Phase);
     }
 
@@ -96,23 +111,24 @@ public class ROportRunManager : MonoBehaviour
             ChangeState(finished);
     }
 
-    private void OnRouteChanged(int totalPoints)
+    private void OnRouteChanged(int pointCount)
     {
-        if (Phase != RunPhase.Planning || statusText == null)
+        if (Phase != RunPhase.Planning)
             return;
 
-        statusText.text = totalPoints >= 2
+        ShowStatus(pointCount >= 2
             ? "Rota pronta! ESPACO: executar | Botao direito: limpar"
-            : "Arraste do personagem/ultima ponta. Espaco: executar | Clique direito: limpar";
+            : "Arraste do personagem/ultima ponta. " +
+              "ESPACO: executar | Botao direito: limpar");
     }
 
     private void OnRouteFeedback(string message)
     {
         if (Phase == RunPhase.Planning)
-            ShowMessage(message);
+            ShowStatus(message);
     }
 
-    private void ShowMessage(string message)
+    private void ShowStatus(string message)
     {
         if (statusText != null)
             statusText.text = message;
@@ -120,59 +136,69 @@ public class ROportRunManager : MonoBehaviour
             Debug.Log("[ROport] " + message);
     }
 
-    // STATE PATTERN: cada fase controla sua entrada, saída e atualização.
     private interface IRunState
     {
         RunPhase Phase { get; }
-        void Enter(ROportRunManager context);
-        void Tick(ROportRunManager context);
-        void Exit(ROportRunManager context);
+
+        void Enter(ROportRunManager manager);
+        void HandleInput(ROportRunManager manager, Keyboard keyboard);
     }
 
     private sealed class PlanningState : IRunState
     {
         public RunPhase Phase => RunPhase.Planning;
 
-        public void Enter(ROportRunManager context)
+        public void Enter(ROportRunManager manager)
         {
-            context.routeDrawer.SetEditable(true);
-            context.ShowMessage("Arraste do personagem/ultima ponta. ESPACO: executar | Botao direito: limpar");
+            manager.routeDrawer.SetEditable(true);
+
+            manager.ShowStatus(
+                "Arraste para desenhar. " +
+                "ESPACO: executar | Botao direito: limpar");
         }
 
-        public void Tick(ROportRunManager context)
+        public void HandleInput(
+            ROportRunManager manager, Keyboard keyboard)
         {
-            if (Keyboard.current.spaceKey.wasPressedThisFrame && context.routeDrawer.HasRoute)
-                context.ChangeState(context.executing);
+            if (keyboard.spaceKey.wasPressedThisFrame &&
+                manager.routeDrawer.HasRoute)
+            {
+                manager.ChangeState(manager.executing);
+            }
         }
-
-        public void Exit(ROportRunManager context) { }
     }
 
     private sealed class ExecutingState : IRunState
     {
         public RunPhase Phase => RunPhase.Executing;
 
-        public void Enter(ROportRunManager context)
+        public void Enter(ROportRunManager manager)
         {
-            context.routeDrawer.SetEditable(false);
-            context.routeFollower.Follow(context.routeDrawer.Points);
-            context.ShowMessage("Executando rota... R: reiniciar");
+            manager.routeDrawer.SetEditable(false);
+
+            manager.routeFollower.Follow(
+                manager.routeDrawer.Points);
+
+            manager.ShowStatus("Executando rota... R: reiniciar");
         }
 
-        public void Tick(ROportRunManager context) { }
-        public void Exit(ROportRunManager context) { }
+        public void HandleInput(
+            ROportRunManager manager, Keyboard keyboard)
+        { }
     }
 
     private sealed class FinishedState : IRunState
     {
         public RunPhase Phase => RunPhase.Finished;
 
-        public void Enter(ROportRunManager context)
+        public void Enter(ROportRunManager manager)
         {
-            context.ShowMessage("Percurso concluído! R: planejar nova rota");
+            manager.ShowStatus(
+                "Percurso concluido! R: planejar nova rota");
         }
 
-        public void Tick(ROportRunManager context) { }
-        public void Exit(ROportRunManager context) { }
+        public void HandleInput(
+            ROportRunManager manager, Keyboard keyboard)
+        { }
     }
 }

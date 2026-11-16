@@ -7,9 +7,7 @@ public class SpriteBillboard : MonoBehaviour
 
     [Header("Trick Animation")]
     [SerializeField] private Transform trickRoot;
-
     [SerializeField] private bool simulateTrickSpin = true;
-
     [SerializeField] private SpriteRenderer spriteRenderer;
 
     [SerializeField, Range(0.05f, 1f)]
@@ -19,13 +17,7 @@ public class SpriteBillboard : MonoBehaviour
     private float originalTrickYaw;
     private bool originalFlipX;
 
-    private float extraRoll = 0f;
-
-    // Permite que o TrickController incline o sprite.
-    public void SetExtraRoll(float angle)
-    {
-        extraRoll = angle;
-    }
+    private float extraRoll;
 
     private void Awake()
     {
@@ -49,54 +41,60 @@ public class SpriteBillboard : MonoBehaviour
         if (targetCamera == null)
             return;
 
-        // Faz o sprite olhar horizontalmente para a camera,
-        // mantendo a orientacao vertical no mundo.
-        Vector3 facingDirection =
-            -targetCamera.transform.forward;
+        UpdateBillboardRotation();
+        UpdateTrickSpin();
+    }
 
-        facingDirection.y = 0f;
+    // Mantem o sprite vertical e voltado para a camera.
+    private void UpdateBillboardRotation()
+    {
+        Vector3 direction = -targetCamera.transform.forward;
 
-        if (facingDirection.sqrMagnitude > 0.001f)
-        {
-            transform.rotation = Quaternion.LookRotation(
-                facingDirection.normalized,
-                Vector3.up);
-        }
+        // Ignora a inclinacao vertical da camera.
+        direction.y = 0f;
 
-        if (!simulateTrickSpin || trickRoot == null)
+        if (direction.sqrMagnitude < 0.0001f)
             return;
 
+        Quaternion facingRotation = Quaternion.LookRotation(
+            direction.normalized,
+            Vector3.up);
 
-        // Aplica a inclinacao da manobra depois
-        // de orientar o sprite para a camera.
-        transform.rotation *= Quaternion.AngleAxis(
+        // A inclinacao adicional representa
+        // tropeços e quedas durante manobras.
+        Quaternion rollRotation = Quaternion.AngleAxis(
             extraRoll,
             Vector3.forward);
 
-        // Converte o giro 3D do TrickController
-        // em um efeito visual de giro 2D.
+        transform.rotation = facingRotation * rollRotation;
+    }
+
+    // Simula o personagem girando de lado
+    // durante uma manobra de 360 graus.
+    private void UpdateTrickSpin()
+    {
+        if (!simulateTrickSpin || trickRoot == null)
+        {
+            RestoreSpinAppearance();
+            return;
+        }
+
         float yaw = Mathf.DeltaAngle(
             originalTrickYaw,
-            trickRoot.localEulerAngles.y
-        );
+            trickRoot.localEulerAngles.y);
 
         float widthFactor = Mathf.Cos(
-            yaw * Mathf.Deg2Rad
-        );
+            yaw * Mathf.Deg2Rad);
 
-        // Simula o personagem virando de lado.
         float width = Mathf.Max(
             minimumWidth,
-            Mathf.Abs(widthFactor)
-        );
+            Mathf.Abs(widthFactor));
 
         transform.localScale = new Vector3(
             originalScale.x * width,
             originalScale.y,
-            originalScale.z
-        );
+            originalScale.z);
 
-        // Espelha o desenho na segunda metade do giro.
         if (spriteRenderer != null)
         {
             spriteRenderer.flipX =
@@ -104,11 +102,24 @@ public class SpriteBillboard : MonoBehaviour
         }
     }
 
-    private void OnDisable()
+    // Usado pelo TrickController
+    // para inclinar o robô durante erros.
+    public void SetExtraRoll(float angle)
+    {
+        extraRoll = angle;
+    }
+
+    private void RestoreSpinAppearance()
     {
         transform.localScale = originalScale;
 
         if (spriteRenderer != null)
             spriteRenderer.flipX = originalFlipX;
+    }
+
+    private void OnDisable()
+    {
+        extraRoll = 0f;
+        RestoreSpinAppearance();
     }
 }

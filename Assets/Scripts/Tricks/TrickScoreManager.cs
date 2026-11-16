@@ -12,12 +12,10 @@ public class TrickScoreManager : MonoBehaviour
     [SerializeField] private TMP_Text scoreText;
 
     [Header("Photo Points")]
-    [SerializeField, Min(0)]
-    private int photoPoints = 50;
+    [SerializeField, Min(0)] private int photoPoints = 50;
 
     public int CurrentScore { get; private set; }
 
-    // Observer Pattern
     public event Action<int> ScoreChanged;
 
     private void Awake()
@@ -46,10 +44,6 @@ public class TrickScoreManager : MonoBehaviour
     private void OnPhotoRecorded(CityProblem problem)
     {
         AddPoints(photoPoints);
-
-        Debug.Log(
-            "[ROport] Foto de " + problem.DisplayName +
-            ": +" + photoPoints + " pontos");
     }
 
     public bool RegisterTrick(int points)
@@ -62,11 +56,6 @@ public class TrickScoreManager : MonoBehaviour
         }
 
         AddPoints(points);
-
-        Debug.Log(
-            "[ROport] Manobra realizada: +" +
-            points + " pontos");
-
         return true;
     }
 
@@ -75,25 +64,23 @@ public class TrickScoreManager : MonoBehaviour
         CurrentScore += amount;
 
         UpdateUI();
-
         ScoreChanged?.Invoke(CurrentScore);
     }
 
     private void OnPhaseChanged(RunPhase phase)
     {
-        if (phase == RunPhase.Planning)
-        {
-            CurrentScore = 0;
+        if (phase != RunPhase.Planning)
+            return;
 
-            UpdateUI();
+        CurrentScore = 0;
 
-            ScoreChanged?.Invoke(CurrentScore);
-        }
+        UpdateUI();
+        ScoreChanged?.Invoke(CurrentScore);
     }
 
     private void UpdateUI()
     {
         if (scoreText != null)
-            scoreText.text = "PONTOS: " + CurrentScore;
+            scoreText.text = $"PONTOS: {CurrentScore}";
     }
 }
