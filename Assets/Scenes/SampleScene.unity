@@ -1071,7 +1071,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ROportCameraController
   mainCamera: {fileID: 330585545}
   player: {fileID: 1986707013}
-  cityCenter: {fileID: 0}
+  cityCenter: {fileID: 490910112}
   routeDrawer: {fileID: 129052041}
   runManager: {fileID: 233408707}
   problemVisualLayers:
@@ -1358,6 +1358,37 @@ MonoBehaviour:
   m_ShadowLayerMask: 1
   m_RenderingLayers: 1
   m_ShadowRenderingLayers: 1
+--- !u!1 &490910111
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 490910112}
+  m_Layer: 0
+  m_Name: CityCenter
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &490910112
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 490910111}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &496836761
 GameObject:
   m_ObjectHideFlags: 0
@@ -4408,7 +4439,7 @@ Transform:
   m_GameObject: {fileID: 1986707009}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -0, y: 1, z: -16}
+  m_LocalPosition: {x: -0, y: 4.05, z: 32}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -4503,6 +4534,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::TrickController
   character: {fileID: 1986707013}
   playerVisual: {fileID: 1334967187}
+  routeFollower: {fileID: 1986707014}
+  spriteBillboard: {fileID: 2127648362}
   runManager: {fileID: 233408707}
   scoreManager: {fileID: 1532269787}
   zones:
@@ -4510,6 +4543,10 @@ MonoBehaviour:
   playerPivotHeight: 1
   animationDuration: 0.65
   jumpHeight: 0.8
+  missSpeedMultiplier: 0.4
+  missSlowdownDuration: 2
+  fallAnimationDuration: 0.65
+  fallTiltAngle: 60
   hintText: {fileID: 27108988}
   feedbackText: {fileID: 72350038}
   feedbackDuration: 2
@@ -4583,6 +4620,11 @@ MonoBehaviour:
   animation: 2
   basePoints: 100
   scoringAxis: 1
+  perfectWindow: 0.25
+  goodWindow: 0.65
+  onlyDescending: 1
+  localDownhillDirection: {x: 0, y: 0, z: -1}
+  directionTolerance: 0.7
 --- !u!1 &2127648359
 GameObject:
   m_ObjectHideFlags: 0
@@ -4698,6 +4740,7 @@ SceneRoots:
   m_ObjectHideFlags: 0
   m_Roots:
   - {fileID: 330585546}
+  - {fileID: 490910112}
   - {fileID: 410087041}
   - {fileID: 832575519}
   - {fileID: 917833056}

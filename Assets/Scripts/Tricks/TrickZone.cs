@@ -29,6 +29,25 @@ public class TrickZone : MonoBehaviour
     [SerializeField]
     private ZoneAxis scoringAxis = ZoneAxis.Z;
 
+    [Header("Timing")]
+    [SerializeField, Range(0f, 1f)]
+    private float perfectWindow = 0.25f;
+
+    [SerializeField, Range(0f, 1f)]
+    private float goodWindow = 0.65f;
+
+    [Header("Movement Direction")]
+    [SerializeField]
+    private bool onlyDescending = true;
+
+    // Direcao da descida no espaco LOCAL da zona.
+    // Na rampa que criamos, -Z representa a descida.
+    [SerializeField]
+    private Vector3 localDownhillDirection = Vector3.back;
+
+    [SerializeField, Range(0f, 1f)]
+    private float directionTolerance = 0.7f;
+
     private BoxCollider zoneCollider;
 
     public string TrickName => trickName;
@@ -48,7 +67,6 @@ public class TrickZone : MonoBehaviour
         if (zoneCollider == null)
             zoneCollider = GetComponent<BoxCollider>();
 
-        // Converte a posicao para o espaco da area.
         Vector3 localPoint =
             transform.InverseTransformPoint(worldPosition);
 
@@ -63,10 +81,44 @@ public class TrickZone : MonoBehaviour
             Mathf.Abs(difference.z) <= halfSize.z;
     }
 
-    public int CalculateScore(
+    // Verifica se o personagem esta realmente
+    // descendo a escada ou rampa.
+    public bool AllowsDirection(Vector3 movementDirection)
+    {
+        if (movementDirection.sqrMagnitude < 0.0001f)
+            return false;
+
+        if (!onlyDescending)
+            return true;
+
+        // Precisa existir movimento para baixo.
+        if (movementDirection.y >= -0.02f)
+            return false;
+
+        Vector3 downhill =
+            transform.TransformDirection(
+                localDownhillDirection.normalized);
+
+        float alignment = Vector3.Dot(
+            movementDirection.normalized,
+            downhill.normalized);
+
+        return alignment >= directionTolerance;
+    }
+
+    // Retorna true se a manobra foi bem-sucedida.
+    // Retorna false se o jogador errou o timing.
+    public bool EvaluateTiming(
         Vector3 worldPosition,
+        out int points,
         out string rating)
     {
+        points = 0;
+        rating = "ERROU!";
+
+        if (!ContainsPoint(worldPosition))
+            return false;
+
         Vector3 localPoint =
             transform.InverseTransformPoint(worldPosition);
 
@@ -90,22 +142,25 @@ public class TrickZone : MonoBehaviour
         }
 
         float normalizedDistance =
-            distanceFromCenter / Mathf.Max(halfLength, 0.001f);
+            distanceFromCenter /
+            Mathf.Max(halfLength, 0.001f);
 
-        if (normalizedDistance <= 0.25f)
+        if (normalizedDistance <= perfectWindow)
         {
+            points = basePoints * 2;
             rating = "PERFEITA!";
-            return basePoints * 2;
+            return true;
         }
 
-        if (normalizedDistance <= 0.65f)
+        if (normalizedDistance <= goodWindow)
         {
+            points = Mathf.RoundToInt(basePoints * 1.5f);
             rating = "BOA!";
-            return Mathf.RoundToInt(basePoints * 1.5f);
+            return true;
         }
 
-        rating = "NORMAL";
-        return basePoints;
+        // Apertou nas bordas: caiu!
+        return false;
     }
 
     private void OnDrawGizmosSelected()
@@ -115,12 +170,12 @@ public class TrickZone : MonoBehaviour
         if (box == null)
             return;
 
-        Matrix4x4 oldMatrix = Gizmos.matrix;
+        Matrix4x4 originalMatrix = Gizmos.matrix;
         Gizmos.matrix = transform.localToWorldMatrix;
 
         Gizmos.color = Color.green;
         Gizmos.DrawWireCube(box.center, box.size);
 
-        Gizmos.matrix = oldMatrix;
+        Gizmos.matrix = originalMatrix;
     }
 }

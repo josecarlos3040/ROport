@@ -112,8 +112,6 @@ public class ROportCameraController : MonoBehaviour
         if (runManager != null)
             runManager.PhaseChanged += OnPhaseChanged;
 
-        if (routeDrawer != null)
-            routeDrawer.RouteChanged += OnRouteChanged;
     }
 
     private void Start()
@@ -134,11 +132,6 @@ public class ROportCameraController : MonoBehaviour
                  runManager.Phase == RunPhase.Finished)
         {
             ChangeView(CameraView.Finished);
-        }
-        else if (routeDrawer != null &&
-                 routeDrawer.Points.Count >= 2)
-        {
-            ChangeView(CameraView.RouteFocus);
         }
         else
         {
@@ -163,17 +156,6 @@ public class ROportCameraController : MonoBehaviour
         UpdateCamera(false);
     }
 
-    private void OnRouteChanged(int pointCount)
-    {
-        if (runManager == null ||
-            runManager.Phase != RunPhase.Planning)
-            return;
-
-        if (pointCount >= 2)
-            ChangeView(CameraView.RouteFocus);
-        else
-            ChangeView(CameraView.Overview);
-    }
 
     private void OnPhaseChanged(RunPhase phase)
     {
@@ -374,9 +356,6 @@ public class ROportCameraController : MonoBehaviour
     {
         if (runManager != null)
             runManager.PhaseChanged -= OnPhaseChanged;
-
-        if (routeDrawer != null)
-            routeDrawer.RouteChanged -= OnRouteChanged;
 
         if (mainCamera != null)
             mainCamera.cullingMask = originalCullingMask;

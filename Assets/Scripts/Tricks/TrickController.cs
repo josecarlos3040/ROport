@@ -1,4 +1,3 @@
-
 using System.Collections;
 using System.Collections.Generic;
 using TMPro;
@@ -10,22 +9,36 @@ public class TrickController : MonoBehaviour
     [Header("References")]
     [SerializeField] private Transform character;
     [SerializeField] private Transform playerVisual;
+    [SerializeField] private RouteFollower routeFollower;
+    [SerializeField] private SpriteBillboard spriteBillboard;
     [SerializeField] private ROportRunManager runManager;
     [SerializeField] private TrickScoreManager scoreManager;
 
     [Header("Trick Zones")]
     [SerializeField] private TrickZone[] zones;
 
-    [Header("Player Settings")]
-    [SerializeField, Min(0f)]
-    private float playerPivotHeight = 1f;
+    [Header("Player")]
+    [SerializeField] private float playerPivotHeight = 1f;
 
-    [Header("Animation")]
+    [Header("Success Animation")]
     [SerializeField, Min(0.1f)]
     private float animationDuration = 0.65f;
 
     [SerializeField, Min(0f)]
     private float jumpHeight = 0.8f;
+
+    [Header("Failure")]
+    [SerializeField, Range(0.1f, 1f)]
+    private float missSpeedMultiplier = 0.4f;
+
+    [SerializeField, Min(0.1f)]
+    private float missSlowdownDuration = 2f;
+
+    [SerializeField, Min(0.1f)]
+    private float fallAnimationDuration = 0.65f;
+
+    [SerializeField]
+    private float fallTiltAngle = 60f;
 
     [Header("UI")]
     [SerializeField] private TMP_Text hintText;
@@ -39,6 +52,7 @@ public class TrickController : MonoBehaviour
 
     private Vector3 visualStartPosition;
     private Quaternion visualStartRotation;
+    private Vector3 visualStartScale;
 
     private Coroutine activeAnimation;
     private float feedbackTimer;
@@ -48,10 +62,20 @@ public class TrickController : MonoBehaviour
         if (character == null)
             character = transform;
 
+        if (routeFollower == null)
+            routeFollower = GetComponent<RouteFollower>();
+
+        if (spriteBillboard == null && playerVisual != null)
+        {
+            spriteBillboard =
+                playerVisual.GetComponentInChildren<SpriteBillboard>(true);
+        }
+
         if (playerVisual != null)
         {
             visualStartPosition = playerVisual.localPosition;
             visualStartRotation = playerVisual.localRotation;
+            visualStartScale = playerVisual.localScale;
         }
     }
 
@@ -82,6 +106,7 @@ public class TrickController : MonoBehaviour
         UpdateFeedback();
 
         if (character == null ||
+            routeFollower == null ||
             runManager == null ||
             scoreManager == null)
         {
@@ -89,37 +114,35 @@ public class TrickController : MonoBehaviour
             return;
         }
 
-        if (runManager.Phase != RunPhase.Executing)
+        if (runManager.Phase != RunPhase.Executing ||
+            routeFollower.IsBlocked)
         {
             SetHint("");
             return;
         }
 
-        // Nao permite iniciar outra manobra
-        // enquanto uma animacao esta acontecendo.
         if (activeAnimation != null)
         {
             SetHint("");
             return;
         }
 
-        TrickZone availableZone = FindAvailableZone();
+        TrickZone zone = FindAvailableZone();
 
-        if (availableZone == null)
+        if (zone == null)
         {
             SetHint("");
             return;
         }
 
-        SetHint(
-            "[F] " + availableZone.TrickName);
+        SetHint("[F] " + zone.TrickName);
 
         Keyboard keyboard = Keyboard.current;
 
         if (keyboard != null &&
             keyboard.fKey.wasPressedThisFrame)
         {
-            PerformTrick(availableZone);
+            PerformTrick(zone);
         }
     }
 
@@ -132,6 +155,9 @@ public class TrickController : MonoBehaviour
             character.position -
             Vector3.up * playerPivotHeight;
 
+        Vector3 movementDirection =
+            routeFollower.CurrentMoveDirection;
+
         TrickZone nearest = null;
         float shortestDistance = float.MaxValue;
 
@@ -139,7 +165,8 @@ public class TrickController : MonoBehaviour
         {
             if (zone == null ||
                 usedZones.Contains(zone) ||
-                !zone.ContainsPoint(feetPosition))
+                !zone.ContainsPoint(feetPosition) ||
+                !zone.AllowsDirection(movementDirection))
             {
                 continue;
             }
@@ -150,8 +177,8 @@ public class TrickController : MonoBehaviour
 
             if (distance < shortestDistance)
             {
-                nearest = zone;
                 shortestDistance = distance;
+                nearest = zone;
             }
         }
 
@@ -164,31 +191,58 @@ public class TrickController : MonoBehaviour
             character.position -
             Vector3.up * playerPivotHeight;
 
-        // Calcula os pontos conforme
-        // o momento em que apertou F.
-        int points = zone.CalculateScore(
+        bool success = zone.EvaluateTiming(
             feetPosition,
+            out int points,
             out string rating);
 
-        if (!scoreManager.RegisterTrick(points))
-            return;
+        if (success)
+        {
+            if (!scoreManager.RegisterTrick(points))
+                return;
 
-        // Impede repetir a mesma manobra
-        // nesta zona durante a run.
-        usedZones.Add(zone);
+            usedZones.Add(zone);
 
-        ShowFeedback(
-            rating + "\n+" + points + " PONTOS");
+            ShowFeedback(
+                rating + "\n+" + points + " PONTOS");
+
+            Debug.Log(
+                "[ROport] Manobra concluida: " +
+                zone.TrickName);
+
+            if (playerVisual != null)
+            {
+                activeAnimation = StartCoroutine(
+                    AnimateTrick(zone.Animation));
+            }
+        }
+        else
+        {
+            // O jogador errou a janela de tempo.
+            usedZones.Add(zone);
+
+            routeFollower.ApplySlowdown(
+                missSpeedMultiplier,
+                missSlowdownDuration);
+
+            ShowFeedback(
+                "ERROU A MANOBRA!\nVELOCIDADE REDUZIDA");
+
+            Debug.Log(
+                "[ROport] Manobra falhou: " +
+                zone.TrickName);
+
+            if (playerVisual != null)
+            {
+                activeAnimation = StartCoroutine(
+                    AnimateFall());
+            }
+        }
 
         SetHint("");
-
-        if (playerVisual != null)
-        {
-            activeAnimation = StartCoroutine(
-                AnimateTrick(zone.Animation));
-        }
     }
 
+    // Salto e giro bem-sucedidos.
     private IEnumerator AnimateTrick(
         TrickAnimation animationType)
     {
@@ -209,12 +263,10 @@ public class TrickController : MonoBehaviour
             float progress = Mathf.Clamp01(
                 elapsed / animationDuration);
 
-            // Salto visual: sobe e desce suavemente.
             float verticalOffset = shouldJump
                 ? Mathf.Sin(progress * Mathf.PI) * jumpHeight
                 : 0f;
 
-            // Giro visual de 360 graus.
             float rotationY = shouldSpin
                 ? 360f * progress
                 : 0f;
@@ -231,17 +283,60 @@ public class TrickController : MonoBehaviour
         }
 
         RestoreVisual();
+        activeAnimation = null;
+    }
 
+    // Animacao provisoria de tropeço / queda.
+    private IEnumerator AnimateFall()
+    {
+        float elapsed = 0f;
+
+        while (elapsed < fallAnimationDuration)
+        {
+            elapsed += Time.deltaTime;
+
+            float progress = Mathf.Clamp01(
+                elapsed / fallAnimationDuration);
+
+            // Sobe e desce a intensidade da queda.
+            float impact = Mathf.Sin(progress * Mathf.PI);
+
+            // O corpo abaixa durante o tropeço.
+            playerVisual.localPosition =
+                visualStartPosition +
+                Vector3.down * (0.25f * impact);
+
+            // Pequena compressao visual.
+            playerVisual.localScale = new Vector3(
+                visualStartScale.x * (1f + 0.1f * impact),
+                visualStartScale.y * (1f - 0.3f * impact),
+                visualStartScale.z);
+
+            // Inclina o sprite de lado.
+            if (spriteBillboard != null)
+            {
+                spriteBillboard.SetExtraRoll(
+                    fallTiltAngle * impact);
+            }
+
+            yield return null;
+        }
+
+        RestoreVisual();
         activeAnimation = null;
     }
 
     private void RestoreVisual()
     {
-        if (playerVisual == null)
-            return;
+        if (playerVisual != null)
+        {
+            playerVisual.localPosition = visualStartPosition;
+            playerVisual.localRotation = visualStartRotation;
+            playerVisual.localScale = visualStartScale;
+        }
 
-        playerVisual.localPosition = visualStartPosition;
-        playerVisual.localRotation = visualStartRotation;
+        if (spriteBillboard != null)
+            spriteBillboard.SetExtraRoll(0f);
     }
 
     private void StopAnimation()
@@ -276,8 +371,11 @@ public class TrickController : MonoBehaviour
 
         feedbackTimer -= Time.deltaTime;
 
-        if (feedbackTimer <= 0f && feedbackText != null)
+        if (feedbackTimer <= 0f &&
+            feedbackText != null)
+        {
             feedbackText.text = "";
+        }
     }
 
     private void OnPhaseChanged(RunPhase phase)
@@ -287,7 +385,6 @@ public class TrickController : MonoBehaviour
             usedZones.Clear();
 
             StopAnimation();
-
             SetHint("");
 
             feedbackTimer = 0f;
@@ -295,8 +392,9 @@ public class TrickController : MonoBehaviour
             if (feedbackText != null)
                 feedbackText.text = "";
         }
-
-        if (phase == RunPhase.Finished)
+        else if (phase == RunPhase.Finished)
+        {
             SetHint("");
+        }
     }
 }

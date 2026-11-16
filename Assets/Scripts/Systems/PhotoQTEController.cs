@@ -36,7 +36,7 @@ public class PhotoQTEController : MonoBehaviour
     private CityProblem currentProblem;
 
     // Tempo total disponível ao iniciar o QTE.
-    private float initialTime;
+    private float initialDistance;
 
     private float feedbackRemaining;
 
@@ -135,7 +135,10 @@ public class PhotoQTEController : MonoBehaviour
 
         // A barra representa a fração do tempo restante.
         float progress = Mathf.Clamp01(
-            remainingTime / initialTime);
+            remainingDistance /
+            Mathf.Max(initialDistance, 0.001f));
+
+        SetBarProgress(progress);
 
         // Se o personagem estiver bloqueado,
         // a barra representa a ultima oportunidade.
@@ -206,9 +209,7 @@ public class PhotoQTEController : MonoBehaviour
         }
 
         currentProblem = problem;
-
-        initialTime =
-            distance / routeFollower.MovementSpeed;
+        initialDistance = distance;
 
         SetBarProgress(1f);
 
@@ -226,8 +227,10 @@ public class PhotoQTEController : MonoBehaviour
         }
 
         Debug.Log(
-            "[ROport] QTE iniciado. Tempo disponível: " +
-            initialTime.ToString("F2") + "s");
+            "[ROport] Tempo estimado do QTE: " +
+            (distance / Mathf.Max(
+                routeFollower.MovementSpeed, 0.01f)
+            ).ToString("F2") + "s");
     }
 
     
@@ -307,7 +310,7 @@ public class PhotoQTEController : MonoBehaviour
     private void HideQTE()
     {
         currentProblem = null;
-        initialTime = 0f;
+        initialDistance = 0f;
 
         if (qtePanel != null)
             qtePanel.SetActive(false);

@@ -17,6 +17,12 @@ public class RouteFollower : MonoBehaviour
     [SerializeField, Min(0.01f)]
     private float waypointTolerance = 0.08f;
 
+    private float speedMultiplier = 1f;
+
+    private float recoveryDuration;
+    private float recoveryElapsed;
+    private float recoveryStartMultiplier;
+
     [Header("Obstacle Detection")]
     [SerializeField] private LayerMask obstacleMask;
 
@@ -44,7 +50,7 @@ public class RouteFollower : MonoBehaviour
     private bool isBlocked;
     private float blockedTimer;
 
-    public float MovementSpeed => movementSpeed;
+    public float MovementSpeed => movementSpeed * speedMultiplier;
     public bool IsBlocked => isBlocked;
 
     public float BlockTimeRemaining =>
@@ -66,6 +72,7 @@ public class RouteFollower : MonoBehaviour
 
     private void Update()
     {
+        UpdateSpeedRecovery();
         if (!isFollowing || targetIndex >= waypoints.Count)
             return;
 
@@ -109,7 +116,7 @@ public class RouteFollower : MonoBehaviour
         }
 
         float step = Mathf.Min(
-            movementSpeed * Time.deltaTime,
+            MovementSpeed * Time.deltaTime,
             distance);
 
         Vector3 direction = toTarget / distance;
@@ -148,6 +155,62 @@ public class RouteFollower : MonoBehaviour
         {
             NextWaypoint();
         }
+    }
+
+    // Direcao atual do movimento na rota.
+    // Considera X, Y e Z.
+    public Vector3 CurrentMoveDirection
+    {
+        get
+        {
+            if (!isFollowing ||
+                isBlocked ||
+                character == null ||
+                targetIndex >= waypoints.Count)
+            {
+                return Vector3.zero;
+            }
+
+            Vector3 direction =
+                waypoints[targetIndex] - character.position;
+
+            if (direction.sqrMagnitude < 0.0001f)
+                return Vector3.zero;
+
+            return direction.normalized;
+        }
+    }
+    // Aplica uma penalidade de velocidade.
+    // Exemplo: multiplier = 0.4 e duration = 2.
+    public void ApplySlowdown(float multiplier, float duration)
+    {
+        speedMultiplier = Mathf.Clamp(multiplier, 0.1f, 1f);
+
+        recoveryStartMultiplier = speedMultiplier;
+        recoveryDuration = Mathf.Max(0.1f, duration);
+        recoveryElapsed = 0f;
+
+        Debug.Log(
+            "[ROport] Desaceleracao aplicada: " +
+            Mathf.RoundToInt(speedMultiplier * 100f) +
+            "% da velocidade.");
+    }
+
+    // Recupera gradualmente a velocidade normal.
+    private void UpdateSpeedRecovery()
+    {
+        if (speedMultiplier >= 1f)
+            return;
+
+        recoveryElapsed += Time.deltaTime;
+
+        float progress = Mathf.Clamp01(
+            recoveryElapsed / recoveryDuration);
+
+        speedMultiplier = Mathf.Lerp(
+            recoveryStartMultiplier,
+            1f,
+            progress);
     }
 
     private bool DetectObstacle(
@@ -214,6 +277,9 @@ public class RouteFollower : MonoBehaviour
 
     public void Follow(IReadOnlyList<Vector3> route)
     {
+        speedMultiplier = 1f;
+        recoveryElapsed = 0f;
+
         waypoints.Clear();
 
         isFollowing = false;
@@ -232,6 +298,9 @@ public class RouteFollower : MonoBehaviour
 
     public void ResetFollower()
     {
+        speedMultiplier = 1f;
+        recoveryElapsed = 0f;
+
         isFollowing = false;
         isBlocked = false;
         blockedTimer = 0f;

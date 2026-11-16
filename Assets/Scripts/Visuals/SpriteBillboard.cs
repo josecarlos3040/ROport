@@ -19,6 +19,14 @@ public class SpriteBillboard : MonoBehaviour
     private float originalTrickYaw;
     private bool originalFlipX;
 
+    private float extraRoll = 0f;
+
+    // Permite que o TrickController incline o sprite.
+    public void SetExtraRoll(float angle)
+    {
+        extraRoll = angle;
+    }
+
     private void Awake()
     {
         if (targetCamera == null)
@@ -57,6 +65,13 @@ public class SpriteBillboard : MonoBehaviour
 
         if (!simulateTrickSpin || trickRoot == null)
             return;
+
+
+        // Aplica a inclinacao da manobra depois
+        // de orientar o sprite para a camera.
+        transform.rotation *= Quaternion.AngleAxis(
+            extraRoll,
+            Vector3.forward);
 
         // Converte o giro 3D do TrickController
         // em um efeito visual de giro 2D.
