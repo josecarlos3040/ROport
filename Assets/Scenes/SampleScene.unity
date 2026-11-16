@@ -4598,8 +4598,8 @@ MonoBehaviour:
   scoreManager: {fileID: 1532269787}
   zones:
   - {fileID: 2112559633}
-  rampSlowMultiplier: 0.8
-  rampBoostMultiplier: 1.6
+  rampSlowMultiplier: 1
+  rampBoostMultiplier: 2
   playerPivotHeight: 1
   animationDuration: 0.65
   jumpHeight: 0.8
