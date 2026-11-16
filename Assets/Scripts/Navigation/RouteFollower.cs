@@ -51,6 +51,9 @@ public class RouteFollower : MonoBehaviour
     public event Action Completed;
     public event Action<Collider> Blocked;
 
+    // Notifica o RunManager quando o player morre.
+    public event Action<CityProblem> Died;
+
     public Vector3 CurrentMoveDirection
     {
         get
@@ -121,21 +124,40 @@ public class RouteFollower : MonoBehaviour
 
         Vector3 normalizedDirection = direction / distance;
 
-        if (DetectObstacle(normalizedDirection, step, out RaycastHit hit,
+
+        if (DetectObstacle(
+            normalizedDirection,
+            step,
+            out RaycastHit hit,
             out Collider overlappingCollider))
         {
-            // Um overlap ja existente nao possui distancia de impacto.
+            Collider obstacle = overlappingCollider != null
+                ? overlappingCollider
+                : hit.collider;
+
             float safeDistance = overlappingCollider != null
                 ? 0f
                 : Mathf.Clamp(hit.distance - collisionSkin, 0f, step);
 
             character.position += normalizedDirection * safeDistance;
 
-            EnterBlockedState(
-                overlappingCollider != null
-                    ? overlappingCollider
-                    : hit.collider);
+            // Procura um CityProblem no objeto atingido
+            // ou em seus objetos pais.
+            CityProblem problem = obstacle != null
+                ? obstacle.GetComponentInParent<CityProblem>()
+                : null;
 
+            // Problema ainda nao fotografado: morte.
+            if (problem != null &&
+                problem.State == CityProblemState.Active)
+            {
+                Die(problem);
+                return;
+            }
+
+            // Problema fotografado ou obstaculo comum:
+            // mantem o comportamento de bloqueio anterior.
+            EnterBlockedState(obstacle);
             return;
         }
 
@@ -307,6 +329,19 @@ public class RouteFollower : MonoBehaviour
 
         speedMultiplier = Mathf.Lerp(
             recoveryStartMultiplier, 1f, progress);
+    }
+
+    private void Die(CityProblem problem)
+    {
+        isFollowing = false;
+        isBlocked = false;
+        blockedTimer = 0f;
+
+        Debug.Log(
+            "[ROport] Player morreu ao colidir com: " +
+            problem.DisplayName);
+
+        Died?.Invoke(problem);
     }
 
     // Mede a distancia 3D restante ate sair da regiao

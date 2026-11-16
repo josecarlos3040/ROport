@@ -1,4 +1,5 @@
 using System;
+using System.Xml;
 using TMPro;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -7,7 +8,8 @@ public enum RunPhase
 {
     Planning,
     Executing,
-    Finished
+    Finished,
+    Dead
 }
 
 public class ROportRunManager : MonoBehaviour
@@ -20,6 +22,7 @@ public class ROportRunManager : MonoBehaviour
     private readonly PlanningState planning = new PlanningState();
     private readonly ExecutingState executing = new ExecutingState();
     private readonly FinishedState finished = new FinishedState();
+    private readonly DeadState dead = new DeadState();
 
     private IRunState currentState;
 
@@ -31,7 +34,12 @@ public class ROportRunManager : MonoBehaviour
     private void Awake()
     {
         if (routeFollower != null)
+        {
             routeFollower.Completed += OnRouteCompleted;
+            routeFollower.Died += OnPlayerDied;
+        }
+
+
 
         if (routeDrawer != null)
         {
@@ -74,7 +82,10 @@ public class ROportRunManager : MonoBehaviour
     private void OnDestroy()
     {
         if (routeFollower != null)
+        {
             routeFollower.Completed -= OnRouteCompleted;
+            routeFollower.Died -= OnPlayerDied;
+        }
 
         if (routeDrawer != null)
         {
@@ -168,6 +179,14 @@ public class ROportRunManager : MonoBehaviour
         }
     }
 
+    private void OnPlayerDied(CityProblem problem)
+    {
+        if (Phase != RunPhase.Executing)
+            return;
+
+        ChangeState(dead);
+    }
+
     private sealed class ExecutingState : IRunState
     {
         public RunPhase Phase => RunPhase.Executing;
@@ -201,4 +220,28 @@ public class ROportRunManager : MonoBehaviour
             ROportRunManager manager, Keyboard keyboard)
         { }
     }
+
+
+    private sealed class DeadState : IRunState
+    {
+        public RunPhase Phase => RunPhase.Dead;
+
+        public void Enter(ROportRunManager manager)
+        {
+            manager.routeDrawer.SetEditable(false);
+
+            manager.ShowStatus(
+                "VOCE MORREU!\n" +
+                "Aperte R para tentar novamente.");
+        }
+
+        public void HandleInput(
+            ROportRunManager manager,
+            Keyboard keyboard)
+        {
+            // A tecla R ja e processada pelo RunManager.
+        }
+    }
+
+
 }
