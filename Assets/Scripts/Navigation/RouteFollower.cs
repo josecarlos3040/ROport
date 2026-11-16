@@ -35,11 +35,24 @@ public class RouteFollower : MonoBehaviour
 
     // Penalidade temporaria de velocidade.
     private float speedMultiplier = 1f;
+    // Controla a velocidade dentro de rampas.
+    private float rampSpeedMultiplier = 1f;
     private float recoveryStartMultiplier = 1f;
     private float recoveryDuration;
     private float recoveryElapsed;
 
-    public float MovementSpeed => movementSpeed * speedMultiplier;
+    public float MovementSpeed
+    {
+        get
+        {
+            float multiplier = speedMultiplier < 1f
+                ? Mathf.Min(speedMultiplier, rampSpeedMultiplier)
+                : rampSpeedMultiplier;
+            return movementSpeed * multiplier;
+        }
+    }
+
+
     public bool IsFollowing => isFollowing;
     public bool IsBlocked => isBlocked;
 
@@ -71,6 +84,10 @@ public class RouteFollower : MonoBehaviour
                 ? direction.normalized
                 : Vector3.zero;
         }
+    }
+    public void SetRampSpeedMultiplier(float multiplier)
+    {
+        rampSpeedMultiplier = Mathf.Clamp(multiplier, 0.1f, 3f);
     }
 
     private void Awake()
@@ -299,6 +316,7 @@ public class RouteFollower : MonoBehaviour
 
     private void ResetMovementState()
     {
+        rampSpeedMultiplier = 1f;
         isFollowing = false;
         isBlocked = false;
         blockedTimer = 0f;
