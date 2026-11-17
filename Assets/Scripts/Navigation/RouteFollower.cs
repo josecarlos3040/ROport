@@ -12,6 +12,11 @@ public class RouteFollower : MonoBehaviour
     [SerializeField, Min(0f)] private float turnSpeed = 12f;
     [SerializeField, Min(0.01f)] private float waypointTolerance = 0.08f;
 
+    [Header("Jump Collision")]
+    [SerializeField] private CapsuleCollider playerCollider;
+    private Vector3 originalColliderCenter;
+    private float jumpOffset;
+
     [Header("Obstacle Detection")]
     [SerializeField] private LayerMask obstacleMask;
     [SerializeField, Min(0.1f)] private float collisionRadius = 0.35f;
@@ -97,6 +102,12 @@ public class RouteFollower : MonoBehaviour
 
         initialPosition = character.position;
         initialRotation = character.rotation;
+
+        if (playerCollider == null)
+            playerCollider = GetComponent<CapsuleCollider>();
+
+        if (playerCollider != null)
+            originalColliderCenter = playerCollider.center;
     }
 
     private void Update()
@@ -216,11 +227,15 @@ public class RouteFollower : MonoBehaviour
         float halfSegment = Mathf.Max(
             0f, collisionHeight * 0.5f - collisionRadius);
 
+        Vector3 collisionCenter = playerCollider != null
+            ? playerCollider.transform.TransformPoint(playerCollider.center)
+            : character.position + Vector3.up * jumpOffset;
+
         Vector3 bottom =
-            character.position - Vector3.up * halfSegment;
+            collisionCenter - Vector3.up * halfSegment;
 
         Vector3 top =
-            character.position + Vector3.up * halfSegment;
+            collisionCenter + Vector3.up * halfSegment;
 
         // Detecta obstaculos com os quais ja existe sobreposicao.
         int overlapCount = Physics.OverlapCapsuleNonAlloc(
@@ -304,6 +319,19 @@ public class RouteFollower : MonoBehaviour
         isFollowing = true;
     }
 
+    public void SetJumpOffset(float height)
+    {
+        jumpOffset = Mathf.Max(0f, height);
+
+        if (playerCollider == null)
+            return;
+
+        // Levanta o Collider sem mover a rota do Player.
+        playerCollider.center =
+            originalColliderCenter +
+            Vector3.up * jumpOffset;
+    }
+
     public void ResetFollower()
     {
         ResetMovementState();
@@ -316,6 +344,7 @@ public class RouteFollower : MonoBehaviour
 
     private void ResetMovementState()
     {
+        SetJumpOffset(0f);
         rampSpeedMultiplier = 1f;
         isFollowing = false;
         isBlocked = false;
