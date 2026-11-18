@@ -20,6 +20,10 @@ public class ROportRunManager : MonoBehaviour
     [SerializeField] private CityCheckpointManager checkpointManager;
     [SerializeField] private TMP_Text statusText;
 
+    [Header("Testing")]
+    [SerializeField]
+    private bool requireCheckpointToStart = true;
+
     private readonly PlanningState planning = new PlanningState();
     private readonly ExecutingState executing = new ExecutingState();
     private readonly FinishedState finished = new FinishedState();
@@ -141,15 +145,19 @@ public class ROportRunManager : MonoBehaviour
             return;
         }
 
-        var points = routeDrawer.Points;
-
-        Vector3 routeEnd = points[points.Count - 1];
-
-        if (!checkpointManager.RouteEndsAtCheckpoint(routeEnd))
+        // So exige o checkpoint se a opcao
+        // estiver ativada no Inspector.
+        if (requireCheckpointToStart)
         {
-            ShowStatus(
-                "A rota precisa terminar no destino amarelo!");
-            return;
+            var points = routeDrawer.Points;
+            Vector3 routeEnd = points[points.Count - 1];
+
+            if (!checkpointManager.RouteEndsAtCheckpoint(routeEnd))
+            {
+                ShowStatus(
+                    "A rota precisa terminar no destino amarelo!");
+                return;
+            }
         }
 
         ChangeState(executing);

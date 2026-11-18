@@ -256,6 +256,21 @@ public class RouteDrawer : MonoBehaviour
 
             int bestNeighbor = -1;
 
+            if (previousId >= 0)
+            {
+                Vector3 previousPosition =
+                    roadNetwork.GetWorldPosition(previousId);
+
+                float previousDistance =
+                    (target - previousPosition).sqrMagnitude;
+
+                if (previousDistance < bestDistance)
+                {
+                    bestNeighbor = previousId;
+                    bestDistance = previousDistance;
+                }
+            }
+
             foreach (int neighbor in roadNetwork.GetNeighbors(lastId))
             {
                 Vector3 neighborPosition =

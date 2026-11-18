@@ -4,6 +4,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
+[DefaultExecutionOrder(100)]
 public class TrickController : MonoBehaviour
 {
     [Header("References")]
@@ -24,27 +25,38 @@ public class TrickController : MonoBehaviour
     [SerializeField, Range(1f, 3f)]
     private float rampBoostMultiplier = 1.6f;
 
+    [Header("Speed Duration After Ramp")]
+    [SerializeField, Min(0f)]
+    private float slowAfterRampDuration = 3f;
+
+    [SerializeField, Min(0f)]
+    private float boostAfterRampDuration = 2f;
+
+    private float remainingSpeedDuration;
+    private float extendedSpeedMultiplier = 1f;
+
     [Header("Player")]
-    [SerializeField] private float playerPivotHeight = 1f;
+    [SerializeField, Min(0f)]
+    private float playerPivotHeight = 1f;
 
-    [Header("Success Animation")]
-    [SerializeField, Min(0.1f)]
-    private float animationDuration = 0.65f;
-
+    [Header("Jump")]
     [SerializeField, Min(0f)]
     private float jumpHeight = 0.8f;
 
-    [Header("Failure")]
-    [SerializeField, Range(0.1f, 1f)]
-    private float missSpeedMultiplier = 0.4f;
+    [Header("Grind Visual")]
+    [SerializeField]
+    private Vector3 grindVisualOffset =
+        new Vector3(0f, 0.25f, 0f);
 
-    [SerializeField, Min(0.1f)]
-    private float missSlowdownDuration = 2f;
+    [SerializeField]
+    private float grindTiltAngle = 8f;
 
+    [Header("Fall Animation")]
     [SerializeField, Min(0.1f)]
     private float fallAnimationDuration = 0.65f;
 
-    [SerializeField] private float fallTiltAngle = 60f;
+    [SerializeField]
+    private float fallTiltAngle = 60f;
 
     [Header("UI")]
     [SerializeField] private TMP_Text hintText;
@@ -53,17 +65,24 @@ public class TrickController : MonoBehaviour
     [SerializeField, Min(0.1f)]
     private float feedbackDuration = 2f;
 
-    private readonly HashSet<TrickZone> usedZones =
+    private readonly HashSet<TrickZone> attemptedZones =
         new HashSet<TrickZone>();
 
-    private readonly HashSet<TrickZone> successfulZones =
+    private readonly HashSet<TrickZone> traversedZones =
         new HashSet<TrickZone>();
+
+    private readonly Dictionary<TrickZone, int> preparedPoints =
+        new Dictionary<TrickZone, int>();
+
+    private TrickZone activeZone;
+    private Vector3 activeTravelDirection;
+    private bool activeSuccessful;
 
     private Vector3 visualStartPosition;
-    private Vector3 visualStartScale;
     private Quaternion visualStartRotation;
+    private Vector3 visualStartScale;
 
-    private Coroutine activeAnimation;
+    private Coroutine fallCoroutine;
     private float feedbackTimer;
 
     private void Awake()
@@ -90,10 +109,10 @@ public class TrickController : MonoBehaviour
 
     private void Start()
     {
-        SetHint(string.Empty);
+        SetHint("");
 
         if (feedbackText != null)
-            feedbackText.text = string.Empty;
+            feedbackText.text = "";
     }
 
     private void OnEnable()
@@ -101,7 +120,6 @@ public class TrickController : MonoBehaviour
         if (runManager != null)
             runManager.PhaseChanged += OnPhaseChanged;
 
-        // Escuta as colisoes com problemas Trick.
         if (routeFollower != null)
             routeFollower.TrickObstacleHit += OnTrickObstacleHit;
     }
@@ -117,101 +135,72 @@ public class TrickController : MonoBehaviour
             routeFollower.SetRampSpeedMultiplier(1f);
         }
 
-        StopAnimation();
+        StopFallAnimation();
+        EndTraversal();
     }
 
     private void Update()
     {
         UpdateFeedback();
 
-        if (character == null ||
-            routeFollower == null ||
-            runManager == null ||
-            scoreManager == null)
+        if (!CanUpdateTricks())
         {
-            SetHint(string.Empty);
+            SetHint("");
+
+            if (routeFollower != null)
+                routeFollower.SetRampSpeedMultiplier(1f);
+
+            EndTraversal();
             return;
         }
 
-        if (runManager.Phase != RunPhase.Executing ||
-            !routeFollower.IsFollowing ||
-            routeFollower.IsBlocked)
+        Vector3 feet = GetFeetPosition();
+        Vector3 direction = routeFollower.CurrentMoveDirection;
+
+        // Primeiro controla a manobra sobre a rampa
+        // ou obstaculo.
+        TrickZone traversalZone =
+            FindTraversalZone(feet, direction);
+
+        UpdateTraversal(traversalZone, direction);
+
+        // Depois verifica se existe uma oportunidade
+        // de preparar uma nova manobra.
+        if (traversalZone != null || fallCoroutine != null)
         {
-            routeFollower.SetRampSpeedMultiplier(1f);
-            SetHint(string.Empty);
+            SetHint("");
             return;
         }
 
-        TrickZone currentZone = FindCurrentZone();
+        TrickZone approachZone =
+            FindApproachZone(feet, direction);
 
-        UpdateRampSpeed(currentZone);
-
-        if (currentZone == null ||
-            usedZones.Contains(currentZone) ||
-            activeAnimation != null)
+        if (approachZone == null)
         {
-            SetHint(string.Empty);
+            SetHint("");
             return;
         }
 
-        SetHint("[F] " + currentZone.TrickName);
+        SetHint("[F] " + approachZone.TrickName);
 
         Keyboard keyboard = Keyboard.current;
 
         if (keyboard != null &&
             keyboard.fKey.wasPressedThisFrame)
         {
-            PerformTrick(currentZone);
+            PrepareTrick(approachZone, feet);
         }
     }
 
-    private TrickZone FindCurrentZone()
+    private bool CanUpdateTricks()
     {
-        if (zones == null)
-            return null;
-
-        Vector3 feetPosition = GetFeetPosition();
-        Vector3 direction =
-            routeFollower.CurrentMoveDirection;
-
-        TrickZone nearest = null;
-        float bestDistance = float.MaxValue;
-
-        foreach (TrickZone zone in zones)
-        {
-            if (zone == null ||
-                !zone.ContainsPoint(feetPosition) ||
-                !zone.AllowsDirection(direction))
-            {
-                continue;
-            }
-
-            float distance =
-                (zone.transform.position - feetPosition)
-                .sqrMagnitude;
-
-            if (distance >= bestDistance)
-                continue;
-
-            bestDistance = distance;
-            nearest = zone;
-        }
-
-        return nearest;
-    }
-
-    private void UpdateRampSpeed(TrickZone zone)
-    {
-        float multiplier = 1f;
-
-        if (zone != null)
-        {
-            multiplier = successfulZones.Contains(zone)
-                ? rampBoostMultiplier
-                : rampSlowMultiplier;
-        }
-
-        routeFollower.SetRampSpeedMultiplier(multiplier);
+        return character != null &&
+               routeFollower != null &&
+               runManager != null &&
+               scoreManager != null &&
+               runManager.Phase == RunPhase.Executing &&
+               routeFollower.IsFollowing &&
+               !routeFollower.IsBlocked;
     }
 
     private Vector3 GetFeetPosition()
@@ -220,64 +209,284 @@ public class TrickController : MonoBehaviour
                Vector3.up * playerPivotHeight;
     }
 
-    private void PerformTrick(TrickZone zone)
+    private TrickZone FindApproachZone(
+        Vector3 feet,
+        Vector3 direction)
     {
-        bool success = zone.EvaluateTiming(
-            GetFeetPosition(),
+        if (zones == null)
+            return null;
+
+        TrickZone nearest = null;
+        float bestDistance = float.MaxValue;
+
+        foreach (TrickZone zone in zones)
+        {
+            if (zone == null ||
+                attemptedZones.Contains(zone) ||
+                traversedZones.Contains(zone) ||
+                !zone.IsInApproach(feet) ||
+                zone.IsInTraversal(feet) ||
+                !routeFollower.WillTraverseTrickZone(zone,playerPivotHeight))
+            {
+                continue;
+            }
+
+            float distance =
+                (zone.transform.position - feet).sqrMagnitude;
+
+            if (distance < bestDistance)
+            {
+                bestDistance = distance;
+                nearest = zone;
+            }
+        }
+
+        return nearest;
+    }
+
+    private void PrepareTrick(TrickZone zone, Vector3 feet)
+    {
+        attemptedZones.Add(zone);
+
+        bool success = zone.EvaluateApproachTiming(
+            feet,
             out int points,
             out string rating);
 
-        usedZones.Add(zone);
-
         if (success)
         {
-            HandleSuccessfulTrick(zone, points, rating);
+            // Guarda o acerto ate chegar na manobra.
+            preparedPoints[zone] = points;
+
+            ShowFeedback(
+                rating + "\nMANOBRA PREPARADA!");
         }
         else
         {
-            HandleFailedTrick();
+            // Sem penalidade extra neste momento.
+            // Na rampa ele ira devagar.
+            // No entulho, a colisao causara o tropeço.
+            ShowFeedback(
+                "ERROU O TIMING!\nSEM BONUS DE VELOCIDADE");
         }
 
-        SetHint(string.Empty);
+        SetHint("");
     }
 
-    private void HandleSuccessfulTrick(
-        TrickZone zone,
-        int points,
-        string rating)
+    private TrickZone FindTraversalZone(
+        Vector3 feet,
+        Vector3 direction)
     {
-        if (!scoreManager.RegisterTrick(points))
+        // Preserva a zona atual enquanto estiver nela.
+        if (activeZone != null &&
+            activeZone.IsInTraversal(feet))
+        {
+            return activeZone;
+        }
+
+        if (zones == null)
+            return null;
+
+        foreach (TrickZone zone in zones)
+        {
+            if (zone == null ||
+                traversedZones.Contains(zone) ||
+                !zone.IsInTraversal(feet) ||
+                (zone.OnlyDescending && direction.y >= -0.02f))
+            {
+                continue;
+            }
+
+            return zone;
+        }
+
+        return null;
+    }
+
+
+    private void UpdateTraversal(
+        TrickZone zone,
+        Vector3 direction)
+    {
+        // Detecta quando o personagem sai de uma zona.
+        if (zone != activeZone)
+        {
+            if (activeZone != null &&
+                activeZone.AffectsTravelSpeed)
+            {
+                // Guarda o resultado da manobra anterior.
+                extendedSpeedMultiplier = activeSuccessful
+                    ? rampBoostMultiplier
+                    : rampSlowMultiplier;
+
+                remainingSpeedDuration = activeSuccessful
+                    ? boostAfterRampDuration
+                    : slowAfterRampDuration;
+            }
+
+            EndTraversal();
+
+            if (zone != null)
+            {
+                // Uma nova zona assume o controle da velocidade.
+                remainingSpeedDuration = 0f;
+                extendedSpeedMultiplier = 1f;
+
+                BeginTraversal(zone, direction);
+            }
+        }
+
+        float multiplier = 1f;
+
+        if (zone != null)
+        {
+            // Enquanto esta dentro da rampa.
+            if (zone.AffectsTravelSpeed)
+            {
+                multiplier = activeSuccessful
+                    ? rampBoostMultiplier
+                    : rampSlowMultiplier;
+            }
+        }
+        else if (remainingSpeedDuration > 0f)
+        {
+            // Continua com a velocidade modificada
+            // depois de sair da rampa.
+            multiplier = extendedSpeedMultiplier;
+
+            remainingSpeedDuration -= Time.deltaTime;
+
+            if (remainingSpeedDuration <= 0f)
+            {
+                remainingSpeedDuration = 0f;
+                multiplier = 1f;
+            }
+        }
+
+        routeFollower.SetRampSpeedMultiplier(multiplier);
+
+        if (activeZone != null &&
+            activeSuccessful &&
+            fallCoroutine == null)
+        {
+            UpdateTrickVisual();
+        }
+    }
+
+    private void BeginTraversal(
+        TrickZone zone,
+        Vector3 direction)
+    {
+        activeZone = zone;
+        activeTravelDirection = direction;
+
+        traversedZones.Add(zone);
+
+        activeSuccessful =
+            preparedPoints.TryGetValue(zone, out int points);
+
+        if (activeSuccessful)
+        {
+            // Manobra preparada corretamente.
+            if (scoreManager.RegisterTrick(points))
+            {
+                ShowFeedback(
+                    zone.TrickName + "!\n+" +
+                    points + " PONTOS");
+            }
+            else
+            {
+                activeSuccessful = false;
+            }
+        }
+
+        // Entrou na escada sem acertar a manobra.
+        if (!activeSuccessful && zone.AffectsTravelSpeed)
+        {
+            ShowFeedback(
+                "ERROU A MANOBRA!\nVELOCIDADE REDUZIDA");
+
+            // Reutiliza a animacao de tropeço.
+            StartFallAnimation();
+        }
+    }
+
+    private void UpdateTrickVisual()
+    {
+        if (playerVisual == null || activeZone == null)
             return;
 
-        successfulZones.Add(zone);
+        float progress = activeZone.GetTraversalProgress(
+            GetFeetPosition(),
+            activeTravelDirection);
 
-        routeFollower.SetRampSpeedMultiplier(
-            rampBoostMultiplier);
+        TrickAnimation animation = activeZone.Animation;
 
-        ShowFeedback(
-            rating + "\n+" + points + " PONTOS!");
+        bool jump =
+            animation == TrickAnimation.Jump ||
+            animation == TrickAnimation.JumpAndSpin;
 
-        StartVisualAnimation(
-            AnimateTrick(zone.Animation));
+        bool spin =
+            animation == TrickAnimation.Spin ||
+            animation == TrickAnimation.JumpAndSpin;
+
+        float jumpOffset = jump
+            ? Mathf.Sin(progress * Mathf.PI) * jumpHeight
+            : 0f;
+
+        float rotationY = spin
+            ? 360f * progress
+            : 0f;
+
+        Vector3 visualOffset = Vector3.up * jumpOffset;
+        float roll = 0f;
+
+        if (animation == TrickAnimation.Grind)
+        {
+            // Entrada e saida suaves do corrimao.
+            float enter = Mathf.SmoothStep(
+                0f, 1f,
+                Mathf.Clamp01(progress * 5f));
+
+            float exit = Mathf.SmoothStep(
+                0f, 1f,
+                Mathf.Clamp01((1f - progress) * 5f));
+
+            float blend = enter * exit;
+
+            visualOffset += grindVisualOffset * blend;
+            roll = grindTiltAngle * blend;
+        }
+
+        playerVisual.localPosition =
+            visualStartPosition + visualOffset;
+
+        playerVisual.localRotation =
+            visualStartRotation *
+            Quaternion.Euler(0f, rotationY, 0f);
+
+        // O Collider sobe somente nas manobras
+        // que realmente possuem salto.
+        routeFollower.SetJumpOffset(jumpOffset);
+
+        if (spriteBillboard != null)
+            spriteBillboard.SetExtraRoll(roll);
     }
 
-    private void HandleFailedTrick()
+    private void EndTraversal()
     {
-        routeFollower.SetRampSpeedMultiplier(
-            rampSlowMultiplier);
+        if (activeZone == null)
+            return;
 
-        routeFollower.ApplySlowdown(
-            missSpeedMultiplier,
-            missSlowdownDuration);
+        activeZone = null;
+        activeSuccessful = false;
+        activeTravelDirection = Vector3.zero;
 
-        ShowFeedback(
-            "ERROU A MANOBRA!\nVELOCIDADE REDUZIDA");
-
-        StartVisualAnimation(AnimateFall());
+        if (fallCoroutine == null)
+            RestoreVisual();
     }
 
-    // NOVO: executado quando o player colide
-    // com um CityProblem do tipo Trick.
+    // Evento recebido ao atingir um problema Trick.
     private void OnTrickObstacleHit(CityProblem problem)
     {
         if (runManager == null ||
@@ -286,83 +495,46 @@ public class TrickController : MonoBehaviour
             return;
         }
 
-        // Se o impacto aconteceu numa TrickZone,
-        // essa tentativa fica consumida.
-        TrickZone zone = FindCurrentZone();
+        TrickZone affectedZone = activeZone;
 
-        if (zone != null)
+        if (affectedZone == null && zones != null)
         {
-            usedZones.Add(zone);
+            Vector3 feet = GetFeetPosition();
 
-            // Se acertou a manobra mas ainda bateu,
-            // perde o bonus de velocidade da zona.
-            successfulZones.Remove(zone);
+            foreach (TrickZone zone in zones)
+            {
+                if (zone != null &&
+                    (zone.IsInTraversal(feet) ||
+                     zone.IsInApproach(feet)))
+                {
+                    affectedZone = zone;
+                    break;
+                }
+            }
         }
 
-        // A desaceleracao ja foi aplicada
-        // pelo RouteFollower. Nao duplicamos aqui.
+        if (affectedZone != null)
+        {
+            attemptedZones.Add(affectedZone);
+            preparedPoints.Remove(affectedZone);
+        }
+
+        // Se colidiu, a execucao da manobra falhou.
+        activeSuccessful = false;
+
         ShowFeedback(
             "TROPECOU!\nVELOCIDADE REDUZIDA");
 
-        StartVisualAnimation(AnimateFall());
-        SetHint(string.Empty);
+        StartFallAnimation();
+        SetHint("");
     }
 
-    private void StartVisualAnimation(IEnumerator animation)
+    private void StartFallAnimation()
     {
-        if (playerVisual == null)
-            return;
+        StopFallAnimation();
 
-        StopAnimation();
-
-        activeAnimation = StartCoroutine(animation);
-    }
-
-    private IEnumerator AnimateTrick(
-        TrickAnimation animationType)
-    {
-        bool jump =
-            animationType == TrickAnimation.Jump ||
-            animationType == TrickAnimation.JumpAndSpin;
-
-        bool spin =
-            animationType == TrickAnimation.Spin ||
-            animationType == TrickAnimation.JumpAndSpin;
-
-        float elapsed = 0f;
-
-        while (elapsed < animationDuration)
-        {
-            elapsed += Time.deltaTime;
-
-            float progress =
-                Mathf.Clamp01(elapsed / animationDuration);
-
-            float jumpOffset = jump
-                ? Mathf.Sin(progress * Mathf.PI) * jumpHeight
-                : 0f;
-
-            // O collider acompanha o salto.
-            if (routeFollower != null)
-                routeFollower.SetJumpOffset(jumpOffset);
-
-            float rotationY = spin
-                ? 360f * progress
-                : 0f;
-
-            playerVisual.localPosition =
-                visualStartPosition +
-                Vector3.up * jumpOffset;
-
-            playerVisual.localRotation =
-                visualStartRotation *
-                Quaternion.Euler(0f, rotationY, 0f);
-
-            yield return null;
-        }
-
-        RestoreVisual();
-        activeAnimation = null;
+        if (playerVisual != null)
+            fallCoroutine = StartCoroutine(AnimateFall());
     }
 
     private IEnumerator AnimateFall()
@@ -373,12 +545,10 @@ public class TrickController : MonoBehaviour
         {
             elapsed += Time.deltaTime;
 
-            float progress =
-                Mathf.Clamp01(
-                    elapsed / fallAnimationDuration);
+            float progress = Mathf.Clamp01(
+                elapsed / fallAnimationDuration);
 
-            float impact =
-                Mathf.Sin(progress * Mathf.PI);
+            float impact = Mathf.Sin(progress * Mathf.PI);
 
             playerVisual.localPosition =
                 visualStartPosition +
@@ -398,16 +568,16 @@ public class TrickController : MonoBehaviour
             yield return null;
         }
 
+        fallCoroutine = null;
         RestoreVisual();
-        activeAnimation = null;
     }
 
-    private void StopAnimation()
+    private void StopFallAnimation()
     {
-        if (activeAnimation != null)
+        if (fallCoroutine != null)
         {
-            StopCoroutine(activeAnimation);
-            activeAnimation = null;
+            StopCoroutine(fallCoroutine);
+            fallCoroutine = null;
         }
 
         RestoreVisual();
@@ -417,14 +587,9 @@ public class TrickController : MonoBehaviour
     {
         if (playerVisual != null)
         {
-            playerVisual.localPosition =
-                visualStartPosition;
-
-            playerVisual.localRotation =
-                visualStartRotation;
-
-            playerVisual.localScale =
-                visualStartScale;
+            playerVisual.localPosition = visualStartPosition;
+            playerVisual.localRotation = visualStartRotation;
+            playerVisual.localScale = visualStartScale;
         }
 
         if (spriteBillboard != null)
@@ -455,41 +620,43 @@ public class TrickController : MonoBehaviour
 
         feedbackTimer -= Time.deltaTime;
 
-        if (feedbackTimer <= 0f &&
-            feedbackText != null)
-        {
-            feedbackText.text = string.Empty;
-        }
+        if (feedbackTimer <= 0f && feedbackText != null)
+            feedbackText.text = "";
     }
 
     private void OnPhaseChanged(RunPhase phase)
     {
-        if (routeFollower != null &&
-            phase != RunPhase.Executing)
-        {
-            routeFollower.SetRampSpeedMultiplier(1f);
-        }
-
         if (phase == RunPhase.Planning)
         {
-            usedZones.Clear();
-            successfulZones.Clear();
+            remainingSpeedDuration = 0f;
+            extendedSpeedMultiplier = 1f;
 
-            StopAnimation();
-            SetHint(string.Empty);
+            attemptedZones.Clear();
+            traversedZones.Clear();
+            preparedPoints.Clear();
+
+            StopFallAnimation();
+            EndTraversal();
+
+            SetHint("");
 
             feedbackTimer = 0f;
 
             if (feedbackText != null)
-                feedbackText.text = string.Empty;
+                feedbackText.text = "";
         }
-        else if (phase == RunPhase.Finished ||
-                 phase == RunPhase.Dead)
+        else if (phase == RunPhase.Dead ||
+                 phase == RunPhase.Finished)
         {
-            SetHint(string.Empty);
+            StopFallAnimation();
+            EndTraversal();
+            SetHint("");
+        }
 
-            if (phase == RunPhase.Dead)
-                StopAnimation();
+        if (phase != RunPhase.Executing &&
+            routeFollower != null)
+        {
+            routeFollower.SetRampSpeedMultiplier(1f);
         }
     }
 }

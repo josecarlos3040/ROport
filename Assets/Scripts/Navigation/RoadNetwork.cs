@@ -175,10 +175,45 @@ public class RoadNetwork : MonoBehaviour
             int current = GetOrCreateNode(position);
 
             if (previous >= 0)
-                Connect(previous, current);
+            {
+                if (segment.DownhillOnly)
+                {
+                    float previousHeight = nodes[previous].Position.y;
+                    float currentHeight = nodes[current].Position.y;
+
+                    // Conecta apenas no sentido da descida.
+                    if (previousHeight > currentHeight + 0.01f)
+                    {
+                        ConnectOneWay(previous, current);
+                    }
+                    else if (currentHeight > previousHeight + 0.01f)
+                    {
+                        ConnectOneWay(current, previous);
+                    }
+                    else
+                    {
+                        Debug.LogWarning(
+                            "[ROport] Segmento sem inclinacao: " +
+                            segment.name);
+                    }
+                }
+                else
+                {
+                    Connect(previous, current);
+                }
+            }
 
             previous = current;
         }
+    }
+
+    private void ConnectOneWay(int from, int to)
+    {
+        if (from == to)
+            return;
+
+        if (!nodes[from].Neighbors.Contains(to))
+            nodes[from].Neighbors.Add(to);
     }
 
     private bool IsAligned(Vector3 position)
