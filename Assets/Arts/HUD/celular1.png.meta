@@ -1,10 +1,10 @@
 fileFormatVersion: 2
-guid: c7c9d198ee214e54ea00cea0f735fafb
+guid: 6707b0d7bfb6b2a409b9f4ca0a48a588
 TextureImporter:
   internalIDToNameTable:
   - first:
-      213: -3479437512955996107
-    second: opcoes_Selected_0
+      213: 6474904984164672938
+    second: celular1_0
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -37,7 +37,7 @@ TextureImporter:
   maxTextureSize: 2048
   textureSettings:
     serializedVersion: 2
-    filterMode: 0
+    filterMode: 1
     aniso: 1
     mipBias: 0
     wrapU: 1
@@ -77,7 +77,7 @@ TextureImporter:
     maxTextureSize: 2048
     resizeAlgorithm: 0
     textureFormat: -1
-    textureCompression: 1
+    textureCompression: 0
     compressionQuality: 50
     crunchedCompression: 0
     allowsAlphaSplitting: 0
@@ -115,13 +115,13 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: opcoes_Selected_0
+      name: celular1_0
       rect:
         serializedVersion: 2
         x: 0
         y: 0
-        width: 180
-        height: 106
+        width: 3840
+        height: 2160
       alignment: 0
       pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -130,8 +130,8 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: 538d61e440e86bfc0800000000000000
-      internalID: -3479437512955996107
+      spriteID: aa5aa8f07cb7bd950800000000000000
+      internalID: 6474904984164672938
       vertices: []
       indices: 
       edges: []
@@ -150,7 +150,7 @@ TextureImporter:
     spriteCustomMetadata:
       entries: []
     nameFileIdTable:
-      opcoes_Selected_0: -3479437512955996107
+      celular1_0: 6474904984164672938
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 

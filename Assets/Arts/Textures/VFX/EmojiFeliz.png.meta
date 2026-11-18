@@ -1,10 +1,10 @@
 fileFormatVersion: 2
-guid: b4abd05b5c18a7541a68577c00a31a28
+guid: bef62d1ac120bc14dbe685524385b778
 TextureImporter:
   internalIDToNameTable:
   - first:
-      213: 3200314653093766089
-    second: sair_Unselected_0
+      213: 5481114420021632366
+    second: EmojiFeliz_0
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -37,7 +37,7 @@ TextureImporter:
   maxTextureSize: 2048
   textureSettings:
     serializedVersion: 2
-    filterMode: 0
+    filterMode: 1
     aniso: 1
     mipBias: 0
     wrapU: 1
@@ -115,13 +115,13 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: sair_Unselected_0
+      name: EmojiFeliz_0
       rect:
         serializedVersion: 2
         x: 0
         y: 0
-        width: 42
-        height: 41
+        width: 500
+        height: 500
       alignment: 0
       pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -130,8 +130,8 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: 9c3a123983dc96c20800000000000000
-      internalID: 3200314653093766089
+      spriteID: e6d19aa5684d01c40800000000000000
+      internalID: 5481114420021632366
       vertices: []
       indices: 
       edges: []
@@ -150,7 +150,7 @@ TextureImporter:
     spriteCustomMetadata:
       entries: []
     nameFileIdTable:
-      sair_Unselected_0: 3200314653093766089
+      EmojiFeliz_0: 5481114420021632366
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 

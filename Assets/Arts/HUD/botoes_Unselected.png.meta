@@ -1,10 +1,10 @@
 fileFormatVersion: 2
-guid: 6680b35c44be7574fb0e91fe9d595bd4
+guid: 882163eecc5e5e645b01bf23da797e03
 TextureImporter:
   internalIDToNameTable:
   - first:
-      213: 7901225599654455034
-    second: opcoes_Unselected_0
+      213: 6652951491944437585
+    second: botoes_Unselected_0
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -37,7 +37,7 @@ TextureImporter:
   maxTextureSize: 2048
   textureSettings:
     serializedVersion: 2
-    filterMode: 0
+    filterMode: 1
     aniso: 1
     mipBias: 0
     wrapU: 1
@@ -77,7 +77,7 @@ TextureImporter:
     maxTextureSize: 2048
     resizeAlgorithm: 0
     textureFormat: -1
-    textureCompression: 1
+    textureCompression: 0
     compressionQuality: 50
     crunchedCompression: 0
     allowsAlphaSplitting: 0
@@ -115,23 +115,67 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: opcoes_Unselected_0
+      name: botoes_Unselected_0
       rect:
         serializedVersion: 2
         x: 0
-        y: 0
-        width: 100
-        height: 53
+        y: 851
+        width: 1400
+        height: 549
       alignment: 0
-      pivot: {x: 0, y: 0}
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: af660a502dac6ad60800000000000000
-      internalID: 7901225599654455034
+      spriteID: 157d0411228045c50800000000000000
+      internalID: 6652951491944437585
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: botoes_Unselected_1
+      rect:
+        serializedVersion: 2
+        x: 0
+        y: 321
+        width: 1400
+        height: 528
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: 0
+      bones: []
+      spriteID: 582d93764d4fa02409fb82a54ec67a32
+      internalID: 153106665
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: botoes_Unselected_2
+      rect:
+        serializedVersion: 2
+        x: 0
+        y: 0
+        width: 1400
+        height: 322
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: 0
+      bones: []
+      spriteID: 2b7d69c5ba785174dbf6aa837a15977e
+      internalID: 1113370487
       vertices: []
       indices: 
       edges: []
@@ -140,7 +184,7 @@ TextureImporter:
     customData: 
     physicsShape: []
     bones: []
-    spriteID: 
+    spriteID: d2a56b84244275a40bb91e17b195002d
     internalID: 0
     vertices: []
     indices: 
@@ -150,7 +194,9 @@ TextureImporter:
     spriteCustomMetadata:
       entries: []
     nameFileIdTable:
-      opcoes_Unselected_0: 7901225599654455034
+      botoes_Unselected_0: 6652951491944437585
+      botoes_Unselected_1: 153106665
+      botoes_Unselected_2: 1113370487
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 
