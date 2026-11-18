@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.InputSystem;
-using UnityEngine.TextCore.Text;
 
 public class TrickController : MonoBehaviour
 {
@@ -35,8 +34,6 @@ public class TrickController : MonoBehaviour
     [SerializeField, Min(0f)]
     private float jumpHeight = 0.8f;
 
-
-
     [Header("Failure")]
     [SerializeField, Range(0.1f, 1f)]
     private float missSpeedMultiplier = 0.4f;
@@ -56,11 +53,9 @@ public class TrickController : MonoBehaviour
     [SerializeField, Min(0.1f)]
     private float feedbackDuration = 2f;
 
-    // Zonas em que o jogador ja tentou uma manobra.
     private readonly HashSet<TrickZone> usedZones =
         new HashSet<TrickZone>();
 
-    // Zonas em que a manobra foi bem-sucedida.
     private readonly HashSet<TrickZone> successfulZones =
         new HashSet<TrickZone>();
 
@@ -91,7 +86,6 @@ public class TrickController : MonoBehaviour
             visualStartRotation = playerVisual.localRotation;
             visualStartScale = playerVisual.localScale;
         }
-
     }
 
     private void Start()
@@ -106,6 +100,10 @@ public class TrickController : MonoBehaviour
     {
         if (runManager != null)
             runManager.PhaseChanged += OnPhaseChanged;
+
+        // Escuta as colisoes com problemas Trick.
+        if (routeFollower != null)
+            routeFollower.TrickObstacleHit += OnTrickObstacleHit;
     }
 
     private void OnDisable()
@@ -114,7 +112,10 @@ public class TrickController : MonoBehaviour
             runManager.PhaseChanged -= OnPhaseChanged;
 
         if (routeFollower != null)
+        {
+            routeFollower.TrickObstacleHit -= OnTrickObstacleHit;
             routeFollower.SetRampSpeedMultiplier(1f);
+        }
 
         StopAnimation();
     }
@@ -132,7 +133,6 @@ public class TrickController : MonoBehaviour
             return;
         }
 
-        // Fora da execucao, a rampa nao altera a velocidade.
         if (runManager.Phase != RunPhase.Executing ||
             !routeFollower.IsFollowing ||
             routeFollower.IsBlocked)
@@ -142,13 +142,10 @@ public class TrickController : MonoBehaviour
             return;
         }
 
-        // Detecta a rampa independentemente de
-        // o jogador ja ter tentado uma manobra.
         TrickZone currentZone = FindCurrentZone();
 
         UpdateRampSpeed(currentZone);
 
-        // Nao permite repetir a manobra na mesma zona.
         if (currentZone == null ||
             usedZones.Contains(currentZone) ||
             activeAnimation != null)
@@ -168,15 +165,12 @@ public class TrickController : MonoBehaviour
         }
     }
 
-    // Encontra a zona de manobra onde
-    // o personagem esta neste momento.
     private TrickZone FindCurrentZone()
     {
         if (zones == null)
             return null;
 
         Vector3 feetPosition = GetFeetPosition();
-
         Vector3 direction =
             routeFollower.CurrentMoveDirection;
 
@@ -206,8 +200,6 @@ public class TrickController : MonoBehaviour
         return nearest;
     }
 
-    // Aplica a velocidade de acordo com o
-    // resultado da manobra nesta rampa.
     private void UpdateRampSpeed(TrickZone zone)
     {
         float multiplier = 1f;
@@ -259,7 +251,6 @@ public class TrickController : MonoBehaviour
 
         successfulZones.Add(zone);
 
-        // Libera o bonus imediatamente.
         routeFollower.SetRampSpeedMultiplier(
             rampBoostMultiplier);
 
@@ -272,8 +263,6 @@ public class TrickController : MonoBehaviour
 
     private void HandleFailedTrick()
     {
-        // Mantem a rampa lenta e aplica
-        // uma penalidade temporaria.
         routeFollower.SetRampSpeedMultiplier(
             rampSlowMultiplier);
 
@@ -287,12 +276,45 @@ public class TrickController : MonoBehaviour
         StartVisualAnimation(AnimateFall());
     }
 
+    // NOVO: executado quando o player colide
+    // com um CityProblem do tipo Trick.
+    private void OnTrickObstacleHit(CityProblem problem)
+    {
+        if (runManager == null ||
+            runManager.Phase != RunPhase.Executing)
+        {
+            return;
+        }
+
+        // Se o impacto aconteceu numa TrickZone,
+        // essa tentativa fica consumida.
+        TrickZone zone = FindCurrentZone();
+
+        if (zone != null)
+        {
+            usedZones.Add(zone);
+
+            // Se acertou a manobra mas ainda bateu,
+            // perde o bonus de velocidade da zona.
+            successfulZones.Remove(zone);
+        }
+
+        // A desaceleracao ja foi aplicada
+        // pelo RouteFollower. Nao duplicamos aqui.
+        ShowFeedback(
+            "TROPECOU!\nVELOCIDADE REDUZIDA");
+
+        StartVisualAnimation(AnimateFall());
+        SetHint(string.Empty);
+    }
+
     private void StartVisualAnimation(IEnumerator animation)
     {
         if (playerVisual == null)
             return;
 
         StopAnimation();
+
         activeAnimation = StartCoroutine(animation);
     }
 
@@ -320,6 +342,7 @@ public class TrickController : MonoBehaviour
                 ? Mathf.Sin(progress * Mathf.PI) * jumpHeight
                 : 0f;
 
+            // O collider acompanha o salto.
             if (routeFollower != null)
                 routeFollower.SetJumpOffset(jumpOffset);
 
@@ -351,7 +374,8 @@ public class TrickController : MonoBehaviour
             elapsed += Time.deltaTime;
 
             float progress =
-                Mathf.Clamp01(elapsed / fallAnimationDuration);
+                Mathf.Clamp01(
+                    elapsed / fallAnimationDuration);
 
             float impact =
                 Mathf.Sin(progress * Mathf.PI);
@@ -378,9 +402,6 @@ public class TrickController : MonoBehaviour
         activeAnimation = null;
     }
 
-
-
-
     private void StopAnimation()
     {
         if (activeAnimation != null)
@@ -396,9 +417,14 @@ public class TrickController : MonoBehaviour
     {
         if (playerVisual != null)
         {
-            playerVisual.localPosition = visualStartPosition;
-            playerVisual.localRotation = visualStartRotation;
-            playerVisual.localScale = visualStartScale;
+            playerVisual.localPosition =
+                visualStartPosition;
+
+            playerVisual.localRotation =
+                visualStartRotation;
+
+            playerVisual.localScale =
+                visualStartScale;
         }
 
         if (spriteBillboard != null)
