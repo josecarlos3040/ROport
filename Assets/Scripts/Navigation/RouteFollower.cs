@@ -8,55 +8,73 @@ public class RouteFollower : MonoBehaviour
     [SerializeField] private Transform character;
 
     [Header("Movement")]
-    [SerializeField, Min(0.1f)] private float movementSpeed = 4.5f;
-    [SerializeField, Min(0f)] private float turnSpeed = 12f;
-    [SerializeField, Min(0.01f)] private float waypointTolerance = 0.08f;
+    [SerializeField, Min(0.1f)]
+    private float movementSpeed = 4.5f;
 
-    [Header("Jump Collision")]
-    [SerializeField] private CapsuleCollider playerCollider;
-    private Vector3 originalColliderCenter;
-    private float jumpOffset;
+    [SerializeField, Min(0f)]
+    private float turnSpeed = 12f;
+
+    [SerializeField, Min(0.01f)]
+    private float waypointTolerance = 0.08f;
 
     [Header("Obstacle Detection")]
     [SerializeField] private LayerMask obstacleMask;
-    [SerializeField, Min(0.1f)] private float collisionRadius = 0.35f;
-    [SerializeField, Min(0.5f)] private float collisionHeight = 1.8f;
-    [SerializeField, Min(0.01f)] private float collisionSkin = 0.05f;
+
+    [SerializeField, Min(0.1f)]
+    private float collisionRadius = 0.35f;
+
+    [SerializeField, Min(0.5f)]
+    private float collisionHeight = 1.8f;
+
+    [SerializeField, Min(0.01f)]
+    private float collisionSkin = 0.05f;
+
+    [Header("Jump Collision")]
+    [SerializeField] private CapsuleCollider playerCollider;
 
     [Header("Blocked Route")]
-    [SerializeField, Min(0.1f)] private float blockedWaitDuration = 3f;
+    [SerializeField, Min(0.1f)]
+    private float blockedWaitDuration = 3f;
 
-    private readonly List<Vector3> waypoints = new List<Vector3>();
+    [Header("Trick Obstacle Penalty")]
+    [SerializeField, Range(0.1f, 1f)]
+    private float trickHitSpeedMultiplier = 0.4f;
 
-    private readonly Collider[] overlapBuffer = new Collider[8];
+    [SerializeField, Min(0.1f)]
+    private float trickHitSlowdownDuration = 2f;
+
+    private readonly List<Vector3> waypoints =
+        new List<Vector3>();
+
+    // Guarda os problemas de manobra ja atingidos
+    // durante esta rota, evitando penalidades repetidas.
+    private readonly HashSet<CityProblem> hitTrickProblems =
+        new HashSet<CityProblem>();
+
+    private readonly Collider[] overlapBuffer =
+        new Collider[32];
+
+    private readonly RaycastHit[] castBuffer =
+        new RaycastHit[32];
 
     private Vector3 initialPosition;
     private Quaternion initialRotation;
+    private Vector3 originalColliderCenter;
 
     private int targetIndex;
     private bool isFollowing;
     private bool isBlocked;
     private float blockedTimer;
 
-    // Penalidade temporaria de velocidade.
-    private float speedMultiplier = 1f;
-    // Controla a velocidade dentro de rampas.
+    private float jumpOffset;
+
+    // Velocidade das rampas e penalidades temporarias.
     private float rampSpeedMultiplier = 1f;
-    private float recoveryStartMultiplier = 1f;
+    private float speedMultiplier = 1f;
+
     private float recoveryDuration;
     private float recoveryElapsed;
-
-    public float MovementSpeed
-    {
-        get
-        {
-            float multiplier = speedMultiplier < 1f
-                ? Mathf.Min(speedMultiplier, rampSpeedMultiplier)
-                : rampSpeedMultiplier;
-            return movementSpeed * multiplier;
-        }
-    }
-
+    private float recoveryStartMultiplier = 1f;
 
     public bool IsFollowing => isFollowing;
     public bool IsBlocked => isBlocked;
@@ -66,18 +84,26 @@ public class RouteFollower : MonoBehaviour
 
     public float BlockWaitDuration => blockedWaitDuration;
 
-    public event Action Completed;
-    public event Action<Collider> Blocked;
+    public float MovementSpeed
+    {
+        get
+        {
+            float multiplier = speedMultiplier < 1f
+                ? Mathf.Min(speedMultiplier, rampSpeedMultiplier)
+                : rampSpeedMultiplier;
 
-    // Notifica o RunManager quando o player morre.
-    public event Action<CityProblem> Died;
+            return movementSpeed * multiplier;
+        }
+    }
 
     public Vector3 CurrentMoveDirection
     {
         get
         {
-            if (!isFollowing || isBlocked ||
-                character == null || targetIndex >= waypoints.Count)
+            if (!isFollowing ||
+                isBlocked ||
+                character == null ||
+                targetIndex >= waypoints.Count)
             {
                 return Vector3.zero;
             }
@@ -90,21 +116,25 @@ public class RouteFollower : MonoBehaviour
                 : Vector3.zero;
         }
     }
-    public void SetRampSpeedMultiplier(float multiplier)
-    {
-        rampSpeedMultiplier = Mathf.Clamp(multiplier, 0.1f, 3f);
-    }
+
+    public event Action Completed;
+    public event Action<Collider> Blocked;
+    public event Action<CityProblem> Died;
+
+    // Novo evento: o personagem bateu em
+    // um obstaculo de manobra.
+    public event Action<CityProblem> TrickObstacleHit;
 
     private void Awake()
     {
         if (character == null)
             character = transform;
 
-        initialPosition = character.position;
-        initialRotation = character.rotation;
-
         if (playerCollider == null)
             playerCollider = GetComponent<CapsuleCollider>();
+
+        initialPosition = character.position;
+        initialRotation = character.rotation;
 
         if (playerCollider != null)
             originalColliderCenter = playerCollider.center;
@@ -148,49 +178,35 @@ public class RouteFollower : MonoBehaviour
         RotateCharacter(direction);
 
         float step = Mathf.Min(
-            MovementSpeed * Time.deltaTime, distance);
+            MovementSpeed * Time.deltaTime,
+            distance);
 
-        Vector3 normalizedDirection = direction / distance;
+        if (step <= 0f)
+            return;
 
+        Vector3 moveDirection = direction / distance;
 
-        if (DetectObstacle(
-            normalizedDirection,
+        if (TryFindObstacle(
+            moveDirection,
             step,
-            out RaycastHit hit,
-            out Collider overlappingCollider))
+            out Collider obstacle,
+            out float hitDistance,
+            out bool isOverlapping))
         {
-            Collider obstacle = overlappingCollider != null
-                ? overlappingCollider
-                : hit.collider;
+            HandleObstacleCollision(
+                obstacle,
+                moveDirection,
+                step,
+                hitDistance,
+                isOverlapping);
 
-            float safeDistance = overlappingCollider != null
-                ? 0f
-                : Mathf.Clamp(hit.distance - collisionSkin, 0f, step);
-
-            character.position += normalizedDirection * safeDistance;
-
-            // Procura um CityProblem no objeto atingido
-            // ou em seus objetos pais.
-            CityProblem problem = obstacle != null
-                ? obstacle.GetComponentInParent<CityProblem>()
-                : null;
-
-            // Problema ainda nao fotografado: morte.
-            if (problem != null &&
-                problem.State == CityProblemState.Active)
-            {
-                Die(problem);
-                return;
-            }
-
-            // Problema fotografado ou obstaculo comum:
-            // mantem o comportamento de bloqueio anterior.
-            EnterBlockedState(obstacle);
             return;
         }
 
         character.position = Vector3.MoveTowards(
-            character.position, target, step);
+            character.position,
+            target,
+            step);
 
         if (Vector3.Distance(character.position, target)
             <= waypointTolerance)
@@ -215,63 +231,200 @@ public class RouteFollower : MonoBehaviour
             turnSpeed * Time.deltaTime);
     }
 
-    private bool DetectObstacle(
+    // Retorna o primeiro obstaculo relevante.
+    // Obstaculos Trick ja atingidos sao ignorados,
+    // mas os outros continuam sendo detectados.
+    private bool TryFindObstacle(
         Vector3 direction,
         float distance,
-        out RaycastHit hit,
-        out Collider overlappingCollider)
+        out Collider obstacle,
+        out float hitDistance,
+        out bool isOverlapping)
     {
-        hit = default;
-        overlappingCollider = null;
+        obstacle = null;
+        hitDistance = 0f;
+        isOverlapping = false;
 
-        float halfSegment = Mathf.Max(
-            0f, collisionHeight * 0.5f - collisionRadius);
+        GetCollisionCapsule(
+            out Vector3 bottom,
+            out Vector3 top);
 
-        Vector3 collisionCenter = playerCollider != null
-            ? playerCollider.transform.TransformPoint(playerCollider.center)
-            : character.position + Vector3.up * jumpOffset;
-
-        Vector3 bottom =
-            collisionCenter - Vector3.up * halfSegment;
-
-        Vector3 top =
-            collisionCenter + Vector3.up * halfSegment;
-
-        // Detecta obstaculos com os quais ja existe sobreposicao.
         int overlapCount = Physics.OverlapCapsuleNonAlloc(
             bottom,
             top,
             collisionRadius,
             overlapBuffer,
             obstacleMask,
-            QueryTriggerInteraction.Ignore);
+            QueryTriggerInteraction.Collide);
 
-        if (overlapCount > 0)
+        for (int i = 0; i < overlapCount; i++)
         {
-            overlappingCollider = overlapBuffer[0];
+            Collider candidate = overlapBuffer[i];
+
+            if (ShouldIgnoreObstacle(candidate))
+                continue;
+
+            obstacle = candidate;
+            isOverlapping = true;
             return true;
         }
 
-        // Detecta o bloqueio antes do proximo movimento.
-        return Physics.CapsuleCast(
+        int hitCount = Physics.CapsuleCastNonAlloc(
             bottom,
             top,
             collisionRadius,
             direction,
-            out hit,
+            castBuffer,
             distance + collisionSkin,
             obstacleMask,
-            QueryTriggerInteraction.Ignore);
+            QueryTriggerInteraction.Collide);
+
+        float nearestDistance = float.MaxValue;
+
+        for (int i = 0; i < hitCount; i++)
+        {
+            RaycastHit hit = castBuffer[i];
+
+            if (ShouldIgnoreObstacle(hit.collider))
+                continue;
+
+            if (hit.distance >= nearestDistance)
+                continue;
+
+            nearestDistance = hit.distance;
+            obstacle = hit.collider;
+        }
+
+        if (obstacle == null)
+            return false;
+
+        hitDistance = nearestDistance;
+        return true;
+    }
+
+    private void GetCollisionCapsule(
+        out Vector3 bottom,
+        out Vector3 top)
+    {
+        float halfSegment = Mathf.Max(
+            0f,
+            collisionHeight * 0.5f - collisionRadius);
+
+        // O centro acompanha o salto.
+        Vector3 center = playerCollider != null
+            ? playerCollider.transform.TransformPoint(
+                playerCollider.center)
+            : character.position + Vector3.up * jumpOffset;
+
+        bottom = center - Vector3.up * halfSegment;
+        top = center + Vector3.up * halfSegment;
+    }
+
+    private bool ShouldIgnoreObstacle(Collider obstacle)
+    {
+        if (obstacle == null ||
+            obstacle == playerCollider)
+        {
+            return true;
+        }
+
+        CityProblem problem =
+            obstacle.GetComponentInParent<CityProblem>();
+
+        if (problem == null)
+            return false;
+
+        if (problem.State == CityProblemState.Resolved)
+            return true;
+
+        return problem.ImpactType == CityProblemImpactType.Trick &&
+               hitTrickProblems.Contains(problem);
+    }
+
+    private void HandleObstacleCollision(
+        Collider obstacle,
+        Vector3 direction,
+        float step,
+        float hitDistance,
+        bool isOverlapping)
+    {
+        CityProblem problem = obstacle != null
+            ? obstacle.GetComponentInParent<CityProblem>()
+            : null;
+
+        if (problem != null &&
+            problem.ImpactType == CityProblemImpactType.Trick)
+        {
+            // Aplica a penalidade uma unica vez.
+            HandleTrickObstacle(problem);
+
+            // Continua movimentando o personagem
+            // normalmente, sem bloquear a rota.
+            character.position = Vector3.MoveTowards(
+                character.position,
+                waypoints[targetIndex],
+                step);
+
+            if (Vector3.Distance(
+                character.position,
+                waypoints[targetIndex]) <= waypointTolerance)
+            {
+                NextWaypoint();
+            }
+
+            return;
+        }
+
+        // Encosta antes do bloqueio, sem atravessa-lo.
+        float safeDistance = isOverlapping
+            ? 0f
+            : Mathf.Clamp(
+                hitDistance - collisionSkin,
+                0f,
+                step);
+
+        character.position += direction * safeDistance;
+
+        // Problema fatal ainda ativo: morte imediata.
+        if (problem != null &&
+            problem.State == CityProblemState.Active &&
+            problem.ImpactType == CityProblemImpactType.Fatal)
+        {
+            Die(problem);
+            return;
+        }
+
+        // Problema ja fotografado ou obstaculo comum:
+        // mantem a espera de 3 segundos.
+        EnterBlockedState(obstacle);
+    }
+
+    private void HandleTrickObstacle(CityProblem problem)
+    {
+        if (!hitTrickProblems.Add(problem))
+            return;
+
+        ApplySlowdown(
+            trickHitSpeedMultiplier,
+            trickHitSlowdownDuration);
+
+        Debug.Log(
+            "[ROport] Tropecou em: " +
+            problem.DisplayName);
+
+        // O TrickController recebe o evento
+        // e executa a animacao de tropeço.
+        TrickObstacleHit?.Invoke(problem);
+
+        // Nao para a rota e nao provoca morte.
+        // O problema sera ignorado nas proximas
+        // verificacoes desta tentativa.
     }
 
     private void EnterBlockedState(Collider obstacle)
     {
         isBlocked = true;
         blockedTimer = blockedWaitDuration;
-
-        Debug.Log(
-            "[ROport] Rota bloqueada por: " +
-            (obstacle != null ? obstacle.name : "obstaculo"));
 
         Blocked?.Invoke(obstacle);
     }
@@ -282,6 +435,19 @@ public class RouteFollower : MonoBehaviour
 
         if (blockedTimer <= 0f)
             FinishRoute();
+    }
+
+    private void Die(CityProblem problem)
+    {
+        isFollowing = false;
+        isBlocked = false;
+        blockedTimer = 0f;
+
+        Debug.Log(
+            "[ROport] Player morreu: " +
+            problem.DisplayName);
+
+        Died?.Invoke(problem);
     }
 
     private void NextWaypoint()
@@ -319,46 +485,55 @@ public class RouteFollower : MonoBehaviour
         isFollowing = true;
     }
 
-    public void SetJumpOffset(float height)
-    {
-        jumpOffset = Mathf.Max(0f, height);
-
-        if (playerCollider == null)
-            return;
-
-        // Levanta o Collider sem mover a rota do Player.
-        playerCollider.center =
-            originalColliderCenter +
-            Vector3.up * jumpOffset;
-    }
-
-    public void ResetFollower()
+    // Mantem o Player no local em que parou.
+    public void StopAtCurrentPosition()
     {
         ResetMovementState();
+
         waypoints.Clear();
         targetIndex = 0;
+    }
+
+    // Mantido para testes em que queremos
+    // voltar ao spawn original.
+    public void ResetFollower()
+    {
+        StopAtCurrentPosition();
 
         character.SetPositionAndRotation(
-            initialPosition, initialRotation);
+            initialPosition,
+            initialRotation);
     }
 
     private void ResetMovementState()
     {
-        SetJumpOffset(0f);
-        rampSpeedMultiplier = 1f;
         isFollowing = false;
         isBlocked = false;
         blockedTimer = 0f;
 
+        hitTrickProblems.Clear();
+
+        rampSpeedMultiplier = 1f;
         speedMultiplier = 1f;
-        recoveryStartMultiplier = 1f;
-        recoveryElapsed = 0f;
+
         recoveryDuration = 0f;
+        recoveryElapsed = 0f;
+        recoveryStartMultiplier = 1f;
+
+        SetJumpOffset(0f);
+    }
+
+    public void SetRampSpeedMultiplier(float multiplier)
+    {
+        rampSpeedMultiplier =
+            Mathf.Clamp(multiplier, 0.1f, 3f);
     }
 
     public void ApplySlowdown(float multiplier, float duration)
     {
-        speedMultiplier = Mathf.Clamp(multiplier, 0.1f, 1f);
+        speedMultiplier =
+            Mathf.Clamp(multiplier, 0.1f, 1f);
+
         recoveryStartMultiplier = speedMultiplier;
         recoveryDuration = Mathf.Max(0.1f, duration);
         recoveryElapsed = 0f;
@@ -366,37 +541,47 @@ public class RouteFollower : MonoBehaviour
 
     private void UpdateSpeedRecovery()
     {
-        if (speedMultiplier >= 1f || recoveryDuration <= 0f)
+        if (speedMultiplier >= 1f ||
+            recoveryDuration <= 0f)
+        {
             return;
+        }
 
         recoveryElapsed += Time.deltaTime;
 
-        float progress =
-            Mathf.Clamp01(recoveryElapsed / recoveryDuration);
+        float progress = Mathf.Clamp01(
+            recoveryElapsed / recoveryDuration);
 
         speedMultiplier = Mathf.Lerp(
-            recoveryStartMultiplier, 1f, progress);
+            recoveryStartMultiplier,
+            1f,
+            progress);
     }
 
-    private void Die(CityProblem problem)
+    // Move a capsula usada na colisao
+    // junto com o salto visual.
+    public void SetJumpOffset(float height)
     {
-        isFollowing = false;
-        isBlocked = false;
-        blockedTimer = 0f;
+        jumpOffset = Mathf.Max(0f, height);
 
-        Debug.Log(
-            "[ROport] Player morreu ao colidir com: " +
-            problem.DisplayName);
+        if (playerCollider == null)
+            return;
 
-        Died?.Invoke(problem);
+        playerCollider.center =
+            originalColliderCenter +
+            Vector3.up * jumpOffset;
     }
 
-    // Mede a distancia 3D restante ate sair da regiao
-    // de um problema, considerando as curvas da rota.
-    public float GetRemainingDistanceInsideProblem(CityProblem problem)
+    // Usado pela barra de fotografia.
+    // Calcula a distancia 3D restante dentro
+    // da area de interacao do problema.
+    public float GetRemainingDistanceInsideProblem(
+        CityProblem problem)
     {
-        if (problem == null || character == null ||
-            !isFollowing || targetIndex >= waypoints.Count)
+        if (problem == null ||
+            character == null ||
+            !isFollowing ||
+            targetIndex >= waypoints.Count)
         {
             return 0f;
         }
@@ -426,7 +611,6 @@ public class RouteFollower : MonoBehaviour
                 continue;
             }
 
-            // Busca o primeiro ponto de saida da area.
             float inside = 0f;
             float outside = 1f;
 
@@ -434,15 +618,13 @@ public class RouteFollower : MonoBehaviour
             {
                 float middle = (inside + outside) * 0.5f;
 
-                if (problem.IsPlayerNear(
-                    Vector3.Lerp(start, end, middle)))
-                {
+                Vector3 testPosition =
+                    Vector3.Lerp(start, end, middle);
+
+                if (problem.IsPlayerNear(testPosition))
                     inside = middle;
-                }
                 else
-                {
                     outside = middle;
-                }
             }
 
             return totalDistance + length * inside;

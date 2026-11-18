@@ -10,6 +10,7 @@ public class CityProgressManager : MonoBehaviour
         public List<string> resolvedIds = new List<string>();
     }
 
+    // Mantemos a chave anterior para preservar os saves.
     private const string SaveKey = "ROport_City_QTE_v1";
 
     [Header("References")]
@@ -34,7 +35,7 @@ public class CityProgressManager : MonoBehaviour
     {
         problems = GetComponentsInChildren<CityProblem>(true);
 
-        ValidateProblemIds();
+        ValidateIds();
 
         if (saveBetweenSessions)
             LoadProgress();
@@ -44,19 +45,25 @@ public class CityProgressManager : MonoBehaviour
 
     private void OnEnable()
     {
-        if (runManager != null)
-            runManager.PhaseChanged += OnPhaseChanged;
+        if (runManager == null)
+            return;
+
+        runManager.CheckpointReached += CommitPendingPhotos;
+        runManager.StageFailed += DiscardPendingPhotos;
     }
 
     private void OnDisable()
     {
-        if (runManager != null)
-            runManager.PhaseChanged -= OnPhaseChanged;
+        if (runManager == null)
+            return;
+
+        runManager.CheckpointReached -= CommitPendingPhotos;
+        runManager.StageFailed -= DiscardPendingPhotos;
     }
 
-    private void ValidateProblemIds()
+    private void ValidateIds()
     {
-        HashSet<string> ids = new HashSet<string>();
+        HashSet<string> knownIds = new HashSet<string>();
 
         foreach (CityProblem problem in problems)
         {
@@ -66,13 +73,13 @@ public class CityProgressManager : MonoBehaviour
             if (string.IsNullOrWhiteSpace(problem.Id))
             {
                 Debug.LogError(
-                    $"[ROport] Problema sem ID: {problem.name}",
+                    "[ROport] Problema sem ID: " + problem.name,
                     problem);
             }
-            else if (!ids.Add(problem.Id))
+            else if (!knownIds.Add(problem.Id))
             {
                 Debug.LogError(
-                    $"[ROport] ID duplicado: {problem.Id}",
+                    "[ROport] ID duplicado: " + problem.Id,
                     problem);
             }
         }
@@ -80,7 +87,8 @@ public class CityProgressManager : MonoBehaviour
 
     public bool RegisterPhoto(CityProblem problem)
     {
-        if (problem == null || runManager == null ||
+        if (problem == null ||
+            runManager == null ||
             runManager.Phase != RunPhase.Executing)
         {
             return false;
@@ -98,16 +106,15 @@ public class CityProgressManager : MonoBehaviour
         pendingIds.Add(problem.Id);
 
         PhotoRecorded?.Invoke(problem);
+
+        Debug.Log(
+            "[ROport] Fotografia pendente: " +
+            problem.DisplayName);
+
         return true;
     }
 
-    private void OnPhaseChanged(RunPhase phase)
-    {
-        if (phase == RunPhase.Planning)
-            ApplyPendingImprovements();
-    }
-
-    private void ApplyPendingImprovements()
+    private void CommitPendingPhotos()
     {
         if (pendingIds.Count == 0)
             return;
@@ -122,7 +129,25 @@ public class CityProgressManager : MonoBehaviour
         if (saveBetweenSessions)
             SaveProgress();
 
-        Debug.Log("[ROport] Melhorias da cidade aplicadas.");
+        Debug.Log(
+            "[ROport] Checkpoint concluido! " +
+            "Melhorias aplicadas.");
+    }
+
+    private void DiscardPendingPhotos()
+    {
+        if (pendingIds.Count == 0)
+            return;
+
+        pendingIds.Clear();
+
+        // Retorna os problemas fotografados
+        // nesta tentativa ao estado Active.
+        // Os ja resolvidos continuam resolvidos.
+        UpdateAllProblems();
+
+        Debug.Log(
+            "[ROport] Fotografias pendentes perdidas.");
     }
 
     private void UpdateAllProblems()
@@ -135,7 +160,8 @@ public class CityProgressManager : MonoBehaviour
             if (problem == null)
                 continue;
 
-            problem.SetResolved(resolvedIds.Contains(problem.Id));
+            problem.SetResolved(
+                resolvedIds.Contains(problem.Id));
         }
     }
 
@@ -145,7 +171,10 @@ public class CityProgressManager : MonoBehaviour
 
         data.resolvedIds.AddRange(resolvedIds);
 
-        PlayerPrefs.SetString(SaveKey, JsonUtility.ToJson(data));
+        PlayerPrefs.SetString(
+            SaveKey,
+            JsonUtility.ToJson(data));
+
         PlayerPrefs.Save();
     }
 
@@ -161,7 +190,7 @@ public class CityProgressManager : MonoBehaviour
             CitySaveData data =
                 JsonUtility.FromJson<CitySaveData>(json);
 
-            if (data?.resolvedIds == null)
+            if (data == null || data.resolvedIds == null)
                 return;
 
             foreach (string id in data.resolvedIds)
@@ -172,8 +201,8 @@ public class CityProgressManager : MonoBehaviour
         }
         catch (Exception exception)
         {
-            Debug.LogWarning(
-                "[ROport] Falha ao carregar progresso: " +
+            Debug.LogError(
+                "[ROport] Erro ao carregar cidade: " +
                 exception.Message);
         }
     }
@@ -188,7 +217,10 @@ public class CityProgressManager : MonoBehaviour
         PlayerPrefs.Save();
 
         if (problems == null)
-            problems = GetComponentsInChildren<CityProblem>(true);
+        {
+            problems =
+                GetComponentsInChildren<CityProblem>(true);
+        }
 
         UpdateAllProblems();
 

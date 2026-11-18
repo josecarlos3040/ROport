@@ -7,11 +7,23 @@ public enum CityProblemState
     Resolved
 }
 
+// Define a consequencia da colisao.
+public enum CityProblemImpactType
+{
+    Fatal,
+    Trick
+}
+
 public class CityProblem : MonoBehaviour
 {
     [Header("Problem Info")]
     [SerializeField] private string problemId = "buraco_01";
     [SerializeField] private string display = "Buraco na rua";
+
+    [Header("Collision Type")]
+    [SerializeField]
+    private CityProblemImpactType impactType =
+        CityProblemImpactType.Fatal;
 
     [Header("Visuals")]
     [SerializeField] private GameObject problemVisual;
@@ -22,19 +34,28 @@ public class CityProblem : MonoBehaviour
     [SerializeField] private GameObject routeBlocker;
 
     [Header("Interaction Area")]
-    [SerializeField, Min(0.5f)] private float interactionsRadius = 5f;
-    [SerializeField, Min(0.1f)] private float verticalTolerance = 1.25f;
-    [SerializeField, Min(0f)] private float playerPivotHeight = 1f;
+    [SerializeField, Min(0.5f)]
+    private float interactionsRadius = 5f;
+
+    [SerializeField, Min(0.1f)]
+    private float verticalTolerance = 1.25f;
+
+    [SerializeField, Min(0f)]
+    private float playerPivotHeight = 1f;
 
     public string Id => problemId;
     public string DisplayName => display;
+
+    public CityProblemImpactType ImpactType => impactType;
+
     public float InteractionRadius => interactionsRadius;
 
     public CityProblemState State { get; private set; } =
         CityProblemState.Active;
 
     public bool CanPhotograph =>
-        isActiveAndEnabled && State == CityProblemState.Active;
+        isActiveAndEnabled &&
+        State == CityProblemState.Active;
 
     private void Awake()
     {
@@ -46,7 +67,8 @@ public class CityProblem : MonoBehaviour
         Vector3 playerFeet =
             playerPosition - Vector3.up * playerPivotHeight;
 
-        Vector3 difference = playerFeet - transform.position;
+        Vector3 difference =
+            playerFeet - transform.position;
 
         if (Mathf.Abs(difference.y) > verticalTolerance)
             return false;
@@ -65,6 +87,10 @@ public class CityProblem : MonoBehaviour
             return false;
 
         State = CityProblemState.Photographed;
+
+        // Fotografar nao remove o bloqueio.
+        // A melhoria depende de chegar ao checkpoint.
+        UpdateVisuals();
 
         Debug.Log("[ROport] Fotografado: " + DisplayName);
         return true;
