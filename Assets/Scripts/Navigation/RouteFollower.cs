@@ -421,6 +421,96 @@ public class RouteFollower : MonoBehaviour
         // verificacoes desta tentativa.
     }
 
+    public bool WillTraverseTrickZone(
+    TrickZone zone,
+    float playerPivotHeight,
+    float maxLookAhead = 35f)
+    {
+        if (zone == null ||
+            character == null ||
+            !isFollowing ||
+            targetIndex >= waypoints.Count)
+        {
+            return false;
+        }
+
+        Vector3 from = character.position;
+        float distanceChecked = 0f;
+
+        bool wasInside = false;
+        float entryHeight = 0f;
+
+        const float sampleSpacing = 0.4f;
+        const float minimumDescent = 0.35f;
+
+        // Analisa os proximos pontos da rota desenhada.
+        for (int i = targetIndex;
+             i < waypoints.Count && distanceChecked < maxLookAhead;
+             i++)
+        {
+            Vector3 to = waypoints[i];
+            Vector3 difference = to - from;
+
+            float segmentLength = difference.magnitude;
+
+            if (segmentLength < 0.001f)
+            {
+                from = to;
+                continue;
+            }
+
+            float remaining = Mathf.Min(
+                segmentLength,
+                maxLookAhead - distanceChecked);
+
+            int samples = Mathf.Max(
+                1,
+                Mathf.CeilToInt(remaining / sampleSpacing));
+
+            for (int j = 1; j <= samples; j++)
+            {
+                float distance =
+                    remaining * (j / (float)samples);
+
+                Vector3 samplePosition =
+                    from + difference * (distance / segmentLength);
+
+                Vector3 feet =
+                    samplePosition - Vector3.up * playerPivotHeight;
+
+                bool isInside = zone.IsInTraversal(feet);
+
+                if (!isInside)
+                {
+                    wasInside = false;
+                    continue;
+                }
+
+                // Manobras que permitem ambos os sentidos
+                // precisam apenas atravessar a zona.
+                if (!zone.OnlyDescending)
+                    return true;
+
+                // Para escadas, a rota precisa realmente
+                // perder altura dentro da zona.
+                if (!wasInside)
+                {
+                    wasInside = true;
+                    entryHeight = feet.y;
+                }
+                else if (entryHeight - feet.y >= minimumDescent)
+                {
+                    return true;
+                }
+            }
+
+            distanceChecked += remaining;
+            from = to;
+        }
+
+        return false;
+    }
+
     private void EnterBlockedState(Collider obstacle)
     {
         isBlocked = true;

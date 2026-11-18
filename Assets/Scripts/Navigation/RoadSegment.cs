@@ -16,6 +16,12 @@ public class RoadSegment : MonoBehaviour
     [SerializeField] private Transform startPoint;
     [SerializeField] private Transform endPoint;
 
+    [Header("Movement Restrictions")]
+    [SerializeField]
+    private bool downhillOnly = false;
+
+    public bool DownhillOnly => downhillOnly;
+
     public RoadAxis Axis => axis;
     public bool UseCustomEndpoints => useCustomEndpoints;
     public BoxCollider Collider => GetComponent<BoxCollider>();
