@@ -540,6 +540,81 @@ MonoBehaviour:
   snapRadius: 3.4
   maxNodes: 300
   lineHeight: 0.15
+--- !u!1 &145022047
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 145022048}
+  - component: {fileID: 145022050}
+  - component: {fileID: 145022049}
+  m_Layer: 6
+  m_Name: TrickZone_1
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &145022048
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 145022047}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0.14899969, y: 0.32999998, z: 0.020000003}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 289287764}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &145022049
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 145022047}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1772dfb644c01fb46a3a9cce945c798c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TrickZone
+  trickName: Salto 360
+  animation: 2
+  basePoints: 100
+  scoringAxis: 0
+  perfectWindow: 0.25
+  goodWindow: 0.65
+  onlyDescending: 0
+  localDownhillDirection: {x: -1, y: 0, z: 0}
+  directionTolerance: 0.7
+--- !u!65 &145022050
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 145022047}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 1
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 9.006348, y: 2.5, z: 2.4360833}
+  m_Center: {x: -0.21978354, y: 0, z: 0.031124353}
 --- !u!1 &163085302
 GameObject:
   m_ObjectHideFlags: 0
@@ -784,6 +859,7 @@ Transform:
   - {fileID: 329649656}
   - {fileID: 82705187}
   - {fileID: 496836762}
+  - {fileID: 145022048}
   m_Father: {fileID: 1692907036}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &289287765
@@ -834,8 +910,8 @@ Transform:
   m_GameObject: {fileID: 329649655}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_LocalPosition: {x: 0, y: -0.595, z: 0}
+  m_LocalScale: {x: 1, y: 0.16643, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 289287764}
@@ -1408,7 +1484,7 @@ Transform:
   m_GameObject: {fileID: 496836761}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalPosition: {x: 0, y: -0.201, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -1433,8 +1509,8 @@ BoxCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Size: {x: 1, y: 1, z: 1}
-  m_Center: {x: 0, y: 0, z: 0}
+  m_Size: {x: 1, y: 0.074578434, z: 1}
+  m_Center: {x: 0, y: -0.4627108, z: 0}
 --- !u!23 &496836764
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -4497,7 +4573,7 @@ Transform:
   m_GameObject: {fileID: 1986707009}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -0, y: 0.99, z: -16.24}
+  m_LocalPosition: {x: -0, y: 0.99, z: -14.24}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -4521,6 +4597,7 @@ MonoBehaviour:
   movementSpeed: 4.5
   turnSpeed: 12
   waypointTolerance: 0.08
+  playerCollider: {fileID: 1986707016}
   obstacleMask:
     serializedVersion: 2
     m_Bits: 128
@@ -4598,11 +4675,12 @@ MonoBehaviour:
   scoreManager: {fileID: 1532269787}
   zones:
   - {fileID: 2112559633}
+  - {fileID: 145022049}
   rampSlowMultiplier: 1
   rampBoostMultiplier: 2
   playerPivotHeight: 1
   animationDuration: 0.65
-  jumpHeight: 0.8
+  jumpHeight: 2
   missSpeedMultiplier: 0.4
   missSlowdownDuration: 2
   fallAnimationDuration: 0.65

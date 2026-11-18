@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.TextCore.Text;
 
 public class TrickController : MonoBehaviour
 {
@@ -33,6 +34,8 @@ public class TrickController : MonoBehaviour
 
     [SerializeField, Min(0f)]
     private float jumpHeight = 0.8f;
+
+
 
     [Header("Failure")]
     [SerializeField, Range(0.1f, 1f)]
@@ -88,6 +91,7 @@ public class TrickController : MonoBehaviour
             visualStartRotation = playerVisual.localRotation;
             visualStartScale = playerVisual.localScale;
         }
+
     }
 
     private void Start()
@@ -316,6 +320,9 @@ public class TrickController : MonoBehaviour
                 ? Mathf.Sin(progress * Mathf.PI) * jumpHeight
                 : 0f;
 
+            if (routeFollower != null)
+                routeFollower.SetJumpOffset(jumpOffset);
+
             float rotationY = spin
                 ? 360f * progress
                 : 0f;
@@ -371,6 +378,9 @@ public class TrickController : MonoBehaviour
         activeAnimation = null;
     }
 
+
+
+
     private void StopAnimation()
     {
         if (activeAnimation != null)
@@ -393,6 +403,9 @@ public class TrickController : MonoBehaviour
 
         if (spriteBillboard != null)
             spriteBillboard.SetExtraRoll(0f);
+
+        if (routeFollower != null)
+            routeFollower.SetJumpOffset(0f);
     }
 
     private void SetHint(string message)
@@ -448,6 +461,9 @@ public class TrickController : MonoBehaviour
                  phase == RunPhase.Dead)
         {
             SetHint(string.Empty);
+
+            if (phase == RunPhase.Dead)
+                StopAnimation();
         }
     }
 }
