@@ -1,13 +1,13 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
-using UnityEngine.Serialization;
 
 [RequireComponent(typeof(Camera))]
 public class ROportCameraController : MonoBehaviour
 {
     private enum CameraView
     {
-        Planning,
+        Overview,
+        RouteFocus,
         Following,
         Finished
     }
@@ -16,6 +16,7 @@ public class ROportCameraController : MonoBehaviour
     [SerializeField] private Camera mainCamera;
     [SerializeField] private Transform player;
     [SerializeField] private Transform cityCenter;
+    [SerializeField] private RouteDrawer routeDrawer;
     [SerializeField] private ROportRunManager runManager;
 
     [Header("Visibility")]
@@ -23,23 +24,25 @@ public class ROportCameraController : MonoBehaviour
     [SerializeField] private GameObject playerSpriteVisual;
     [SerializeField] private GameObject mapMarker;
 
-    [Header("Planning Camera")]
+    [Header("Overview Camera")]
     [SerializeField] private float overviewSize = 28f;
     [SerializeField] private float overviewDistance = 60f;
 
-    [FormerlySerializedAs("drawingPitch")]
+    [Header("Drawing Camera")]
+    [SerializeField] private float drawingSize = 16f;
+
     [SerializeField, Range(0f, 90f)]
-    private float planningPitch = 65f;
+    private float drawingPitch = 65f;
 
-    [FormerlySerializedAs("drawingYaw")]
     [SerializeField, Range(-180f, 180f)]
-    private float planningYaw = 30f;
+    private float drawingYaw = 30f;
 
-    [FormerlySerializedAs("drawingRoll")]
     [SerializeField, Range(-30f, 30f)]
-    private float planningRoll = 0f;
+    private float drawingRoll = 0f;
 
-    [Header("Execution Camera")]
+    [SerializeField] private float drawingDistance = 26f;
+
+    [Header("Execution Camera - First Floor")]
     [SerializeField] private float executionSize = 9f;
 
     [SerializeField, Range(-180f, 180f)]
@@ -51,6 +54,28 @@ public class ROportCameraController : MonoBehaviour
     [SerializeField] private float executionHeight = 7f;
     [SerializeField] private float executionLookHeight = 1f;
     [SerializeField] private float lookAhead = 1.5f;
+
+    [Header("Second Floor Camera")]
+    [SerializeField] private bool enableSecondFloorView = true;
+
+    [Tooltip("Altura Y do chao para entrar no modo superior.")]
+    [SerializeField] private float secondFloorEnterHeight = 8.5f;
+
+    [Tooltip("Altura Y do chao para voltar ao modo inferior.")]
+    [SerializeField] private float secondFloorExitHeight = 7f;
+
+    [Tooltip("90 seria completamente de cima.")]
+    [SerializeField, Range(45f, 89f)]
+    private float upperFloorPitch = 82f;
+
+    [SerializeField, Min(1f)]
+    private float upperFloorHeight = 14f;
+
+    [SerializeField, Min(1f)]
+    private float upperFloorSize = 10f;
+
+    [SerializeField, Min(0f)]
+    private float floorTransitionDuration = 1f;
 
     [Header("Player")]
     [SerializeField] private float playerPivotHeight = 1f;
@@ -65,7 +90,7 @@ public class ROportCameraController : MonoBehaviour
     [SerializeField, Min(0.1f)]
     private float rotationSpeed = 5f;
 
-    private CameraView currentView = CameraView.Planning;
+    private CameraView currentView = CameraView.Overview;
 
     private Vector3 positionVelocity;
     private float zoomVelocity;
@@ -74,12 +99,17 @@ public class ROportCameraController : MonoBehaviour
     private bool originalSpriteActive;
     private bool originalMarkerActive;
 
+    // Controla a transicao entre os andares.
+    private bool isOnUpperFloor;
+    private float upperFloorBlend;
+
     private void Awake()
     {
         if (mainCamera == null)
             mainCamera = GetComponent<Camera>();
 
         mainCamera.orthographic = true;
+
         originalCullingMask = mainCamera.cullingMask;
 
         if (playerSpriteVisual != null)
@@ -100,30 +130,39 @@ public class ROportCameraController : MonoBehaviour
         if (runManager == null || player == null)
         {
             Debug.LogWarning(
-                "[ROport] Camera sem referencias obrigatorias.",
+                "[ROport Camera] Referencias incompletas.",
                 this);
         }
 
-        RunPhase phase = runManager != null
-            ? runManager.Phase
-            : RunPhase.Planning;
+        if (runManager != null &&
+            runManager.Phase == RunPhase.Executing)
+        {
+            ChangeView(CameraView.Following);
+        }
+        else if (runManager != null &&
+                 runManager.Phase == RunPhase.Finished)
+        {
+            ChangeView(CameraView.Finished);
+        }
+        else
+        {
+            ChangeView(CameraView.Overview);
+        }
 
-        OnPhaseChanged(phase);
         UpdateCamera(true);
     }
 
     private void LateUpdate()
     {
-        // O enquadramento de planejamento nao muda
-        // quando o jogador desenha ou solta o mouse.
-        // Congela temporariamente transicoes antigas
-        // durante o arrasto, evitando alterar o Raycast.
-        if (currentView == CameraView.Planning &&
+        // Preserva a camera durante o desenho.
+        bool isDrawing =
+            runManager != null &&
+            runManager.Phase == RunPhase.Planning &&
             Mouse.current != null &&
-            Mouse.current.leftButton.isPressed)
-        {
+            Mouse.current.leftButton.isPressed;
+
+        if (isDrawing)
             return;
-        }
 
         UpdateCamera(false);
     }
@@ -133,7 +172,7 @@ public class ROportCameraController : MonoBehaviour
         switch (phase)
         {
             case RunPhase.Planning:
-                ChangeView(CameraView.Planning);
+                ChangeView(CameraView.Overview);
                 break;
 
             case RunPhase.Executing:
@@ -146,29 +185,107 @@ public class ROportCameraController : MonoBehaviour
         }
     }
 
-    private void ChangeView(CameraView view)
+    private void ChangeView(CameraView newView)
     {
-        currentView = view;
+        currentView = newView;
 
         positionVelocity = Vector3.zero;
         zoomVelocity = 0f;
+
+        if (newView == CameraView.Overview ||
+            newView == CameraView.RouteFocus)
+        {
+            isOnUpperFloor = false;
+            upperFloorBlend = 0f;
+        }
 
         UpdateVisibility();
     }
 
     private void UpdateVisibility()
     {
-        bool isPlanning = currentView == CameraView.Planning;
+        bool overview =
+            currentView == CameraView.Overview;
 
-        mainCamera.cullingMask = isPlanning
-            ? originalCullingMask & ~problemVisualLayers.value
-            : originalCullingMask;
+        bool executing =
+            currentView == CameraView.Following ||
+            currentView == CameraView.Finished;
+
+        if (mainCamera != null)
+        {
+            mainCamera.cullingMask = executing
+                ? originalCullingMask
+                : originalCullingMask &
+                  ~problemVisualLayers.value;
+        }
 
         if (playerSpriteVisual != null)
-            playerSpriteVisual.SetActive(!isPlanning);
+            playerSpriteVisual.SetActive(!overview);
 
         if (mapMarker != null)
-            mapMarker.SetActive(isPlanning);
+            mapMarker.SetActive(overview);
+    }
+
+    private Vector3 GetPlayerGroundPosition()
+    {
+        if (player == null)
+            return Vector3.zero;
+
+        return player.position -
+            Vector3.up * playerPivotHeight;
+    }
+
+    private Vector3 GetPlayerForward()
+    {
+        if (player == null)
+            return Vector3.forward;
+
+        Vector3 forward = player.forward;
+        forward.y = 0f;
+
+        if (forward.sqrMagnitude < 0.001f)
+            return Vector3.forward;
+
+        return forward.normalized;
+    }
+
+    // NOVO: verifica em qual andar o jogador esta.
+    private void UpdateFloorState(bool instant)
+    {
+        if (!enableSecondFloorView || player == null)
+        {
+            isOnUpperFloor = false;
+            upperFloorBlend = 0f;
+            return;
+        }
+
+        float groundHeight = GetPlayerGroundPosition().y;
+
+        // Usa dois limites diferentes para impedir
+        // que a camera fique alternando sem parar.
+        if (isOnUpperFloor)
+        {
+            if (groundHeight <= secondFloorExitHeight)
+                isOnUpperFloor = false;
+        }
+        else
+        {
+            if (groundHeight >= secondFloorEnterHeight)
+                isOnUpperFloor = true;
+        }
+
+        float targetBlend = isOnUpperFloor ? 1f : 0f;
+
+        if (instant || floorTransitionDuration <= 0f)
+        {
+            upperFloorBlend = targetBlend;
+            return;
+        }
+
+        upperFloorBlend = Mathf.MoveTowards(
+            upperFloorBlend,
+            targetBlend,
+            Time.deltaTime / floorTransitionDuration);
     }
 
     private void UpdateCamera(bool instant)
@@ -176,114 +293,137 @@ public class ROportCameraController : MonoBehaviour
         if (mainCamera == null)
             return;
 
+        Vector3 target;
         Vector3 desiredPosition;
         Quaternion desiredRotation;
         float desiredSize;
 
-        if (currentView == CameraView.Planning)
+        if (currentView == CameraView.Overview)
         {
-            CalculatePlanningCamera(
-                out desiredPosition,
-                out desiredRotation);
+            // Visao geral da cidade.
+            target = cityCenter != null
+                ? cityCenter.position
+                : Vector3.zero;
+
+            desiredRotation = Quaternion.Euler(
+                drawingPitch,
+                drawingYaw,
+                drawingRoll);
+
+            desiredPosition = target -
+                desiredRotation * Vector3.forward *
+                overviewDistance;
 
             desiredSize = overviewSize;
         }
+        else if (currentView == CameraView.RouteFocus)
+        {
+            target = GetPlayerGroundPosition();
+
+            desiredRotation = Quaternion.Euler(
+                drawingPitch, 0f, 0f);
+
+            desiredPosition = target -
+                desiredRotation * Vector3.forward *
+                drawingDistance;
+
+            desiredSize = drawingSize;
+        }
         else
         {
-            CalculateExecutionCamera(
-                out desiredPosition,
-                out desiredRotation);
+            // Camera de acompanhamento.
+            // Agora considera primeiro e segundo andar.
 
-            desiredSize = executionSize;
+            UpdateFloorState(instant);
+
+            Vector3 forward = GetPlayerForward();
+
+            Vector3 right = Vector3.Cross(
+                Vector3.up, forward).normalized;
+
+            float angle =
+                executionOrbitAngle * Mathf.Deg2Rad;
+
+            Vector3 orbitDirection =
+                forward * Mathf.Cos(angle) +
+                right * Mathf.Sin(angle);
+
+            target = GetPlayerGroundPosition();
+
+            if (currentView == CameraView.Following)
+                target += forward * lookAhead;
+
+            target += Vector3.up * executionLookHeight;
+
+            // Altura da camera interpolada.
+            float cameraHeight = Mathf.Lerp(
+                executionHeight,
+                upperFloorHeight,
+                upperFloorBlend);
+
+            // Para a camera superior, calculamos
+            // a distancia horizontal pelo angulo.
+            float upperPitchRadians =
+                upperFloorPitch * Mathf.Deg2Rad;
+
+            float upperHorizontalDistance =
+                upperFloorHeight /
+                Mathf.Tan(upperPitchRadians);
+
+            float horizontalDistance = Mathf.Lerp(
+                executionDistance,
+                upperHorizontalDistance,
+                upperFloorBlend);
+
+            desiredPosition =
+                target +
+                orbitDirection * horizontalDistance +
+                Vector3.up * cameraHeight;
+
+            desiredRotation = Quaternion.LookRotation(
+                target - desiredPosition,
+                Vector3.up);
+
+            desiredSize = Mathf.Lerp(
+                executionSize,
+                upperFloorSize,
+                upperFloorBlend);
         }
 
         if (instant)
         {
             transform.SetPositionAndRotation(
-                desiredPosition, desiredRotation);
+                desiredPosition,
+                desiredRotation);
 
             mainCamera.orthographicSize = desiredSize;
             return;
         }
 
+        // Transicao suave de posicao.
         transform.position = Vector3.SmoothDamp(
             transform.position,
             desiredPosition,
             ref positionVelocity,
             positionSmoothTime);
 
+        // Transicao suave de rotacao.
         float rotationFactor =
-            1f - Mathf.Exp(-rotationSpeed * Time.deltaTime);
+            1f - Mathf.Exp(
+                -rotationSpeed * Time.deltaTime);
 
         transform.rotation = Quaternion.Slerp(
             transform.rotation,
             desiredRotation,
             rotationFactor);
 
-        mainCamera.orthographicSize = Mathf.SmoothDamp(
-            mainCamera.orthographicSize,
-            desiredSize,
-            ref zoomVelocity,
-            zoomSmoothTime);
-    }
-
-    private void CalculatePlanningCamera(
-        out Vector3 position,
-        out Quaternion rotation)
-    {
-        Vector3 center = cityCenter != null
-            ? cityCenter.position
-            : Vector3.zero;
-
-        rotation = Quaternion.Euler(
-            planningPitch,
-            planningYaw,
-            planningRoll);
-
-        position = center -
-                   rotation * Vector3.forward * overviewDistance;
-    }
-
-    private void CalculateExecutionCamera(
-        out Vector3 position,
-        out Quaternion rotation)
-    {
-        Vector3 playerPosition = player != null
-            ? player.position - Vector3.up * playerPivotHeight
-            : Vector3.zero;
-
-        Vector3 forward = player != null
-            ? player.forward
-            : Vector3.forward;
-
-        forward.y = 0f;
-
-        if (forward.sqrMagnitude < 0.0001f)
-            forward = Vector3.forward;
-
-        forward.Normalize();
-
-        Vector3 right = Vector3.Cross(Vector3.up, forward);
-
-        float angle = executionOrbitAngle * Mathf.Deg2Rad;
-
-        Vector3 orbitDirection =
-            forward * Mathf.Cos(angle) +
-            right * Mathf.Sin(angle);
-
-        Vector3 target = playerPosition;
-
-        if (currentView == CameraView.Following)
-            target += forward * lookAhead;
-
-        target += Vector3.up * executionLookHeight;
-
-        position = target +
-                   orbitDirection * executionDistance +
-                   Vector3.up * executionHeight;
-
-        rotation = Quaternion.LookRotation(
-            target - position, Vector3.up);
+        // Transicao suave de zoom.
+        mainCamera.orthographicSize =
+            Mathf.SmoothDamp(
+                mainCamera.orthographicSize,
+                desiredSize,
+                ref zoomVelocity,
+                zoomSmoothTime);
     }
 
     private void OnDisable()
@@ -295,9 +435,11 @@ public class ROportCameraController : MonoBehaviour
             mainCamera.cullingMask = originalCullingMask;
 
         if (playerSpriteVisual != null)
-            playerSpriteVisual.SetActive(originalSpriteActive);
+            playerSpriteVisual.SetActive(
+                originalSpriteActive);
 
         if (mapMarker != null)
-            mapMarker.SetActive(originalMarkerActive);
+            mapMarker.SetActive(
+                originalMarkerActive);
     }
 }
