@@ -12,6 +12,9 @@ public class RouteDrawer : MonoBehaviour
     [SerializeField] private LineRenderer routeLine;
     [SerializeField] private RoadNetwork roadNetwork;
 
+    [SerializeField]
+    private PhoneMapInput phoneMapInput;
+
     [Header("Layers")]
     [SerializeField] private LayerMask roadMask;
 
@@ -30,6 +33,10 @@ public class RouteDrawer : MonoBehaviour
 
     [SerializeField]
     private float lineHeight = 0.2f;
+
+    [Header("Phone Map Drawing")]
+    [SerializeField]
+    private bool easyStartOnPhone = true;
 
     [Header("Player")]
     [SerializeField, Min(0f)]
@@ -77,26 +84,57 @@ public class RouteDrawer : MonoBehaviour
             mouse == null ||
             player == null ||
             roadNetwork == null ||
-            topDownCamera == null)
+            (phoneMapInput == null && topDownCamera == null))
         {
             return;
         }
 
-        if (mouse.rightButton.wasPressedThisFrame)
+        // No modo celular, so aceita comandos
+        // dentro da area do minimapa.
+        bool pointerOnMap =
+            phoneMapInput == null ||
+            phoneMapInput.IsPointerOverMap();
+
+        // Limpa a rota com o botao direito.
+        if (mouse.rightButton.wasPressedThisFrame &&
+            pointerOnMap)
         {
             ClearRoute();
             return;
         }
 
-        if (mouse.leftButton.wasPressedThisFrame &&
-            (EventSystem.current == null ||
-             !EventSystem.current.IsPointerOverGameObject()))
+        // Inicio do desenho.
+        if (mouse.leftButton.wasPressedThisFrame)
         {
-            BeginDrawing();
+            bool canStart;
+
+            if (phoneMapInput != null)
+            {
+                // O RawImage e parte da UI.
+                // Por isso nao usamos IsPointerOverGameObject
+                // para bloquear o desenho do celular.
+                canStart = pointerOnMap;
+            }
+            else
+            {
+                // Preserva o comportamento antigo
+                // caso o celular nao esteja configurado.
+                canStart =
+                    EventSystem.current == null ||
+                    !EventSystem.current.IsPointerOverGameObject();
+            }
+
+            if (canStart)
+                BeginDrawing();
         }
 
-        if (isDrawing && mouse.leftButton.isPressed)
+        // Continua desenhando somente dentro do mapa.
+        if (isDrawing &&
+            mouse.leftButton.isPressed &&
+            pointerOnMap)
+        {
             ContinueDrawing();
+        }
 
         if (mouse.leftButton.wasReleasedThisFrame)
             isDrawing = false;
@@ -168,23 +206,51 @@ public class RouteDrawer : MonoBehaviour
 
     private void BeginDrawing()
     {
-        if (routeNodes.Count == 0 ||
-            !TryGetRoadPoint(out Vector3 mousePoint))
+        if (routeNodes.Count == 0)
         {
+            Debug.LogWarning(
+                "[ROport Phone] Nenhum no inicial disponivel.");
+
             return;
         }
 
-        Vector3 tip = roadNetwork.GetWorldPosition(
-            routeNodes[routeNodes.Count - 1]);
-
-        if (Vector3.Distance(tip, mousePoint) > startRadius)
+        if (!TryGetRoadPoint(out Vector3 mousePoint))
         {
-            SendFeedback(
-                "Comece perto da ultima ponta da rota.");
+
+
+            Debug.LogWarning(
+                "[ROport Phone] Clique sem rua detectada. " +
+                "Verifique PhoneMapCamera e Road Mask.");
+
             return;
         }
 
+        Vector3 lastSurface =
+            roadNetwork.GetWorldPosition(
+                routeNodes[routeNodes.Count - 1]);
+
+        bool usingPhone =
+            phoneMapInput != null &&
+            easyStartOnPhone;
+
+        // No celular, nao exige clicar precisamente
+        // no pequeno marcador do personagem.
+        if (!usingPhone)
+        {
+            if (Vector3.Distance(lastSurface, mousePoint)
+                > startRadius)
+            {
+
+                return;
+            }
+        }
+
+        // O caminho continua partindo do no
+        // registrado no RoadNetwork.
         isDrawing = true;
+
+        Debug.Log(
+            "[ROport Phone] Desenho iniciado!");
     }
 
     private void ContinueDrawing()
@@ -210,28 +276,75 @@ public class RouteDrawer : MonoBehaviour
     {
         point = Vector3.zero;
 
-        if (Mouse.current == null || topDownCamera == null)
-            return false;
+        Ray ray;
 
-        Vector2 mousePosition =
-            Mouse.current.position.ReadValue();
-
-        Ray ray = topDownCamera.ScreenPointToRay(
-            new Vector3(mousePosition.x, mousePosition.y, 0f));
-
-        // Os obstaculos nao impedem desenhar a rota.
-        if (!Physics.Raycast(
-            ray,
-            out RaycastHit hit,
-            250f,
-            roadMask,
-            QueryTriggerInteraction.Ignore))
+        if (phoneMapInput != null)
         {
-            return false;
+            if (!phoneMapInput.TryGetMapRay(out ray))
+                return false;
+        }
+        else
+        {
+            if (Mouse.current == null ||
+                topDownCamera == null)
+                return false;
+
+            Vector2 mousePosition =
+                Mouse.current.position.ReadValue();
+
+            ray = topDownCamera.ScreenPointToRay(
+                new Vector3(
+                    mousePosition.x,
+                    mousePosition.y,
+                    0f));
         }
 
-        point = hit.point;
-        return true;
+        // Aumentamos a distancia de 250 para 2000.
+        const float maxDistance = 2000f;
+
+        if (Physics.Raycast(
+            ray,
+            out RaycastHit hit,
+            maxDistance,
+            roadMask.value,
+            QueryTriggerInteraction.Ignore))
+        {
+            point = hit.point;
+            return true;
+        }
+
+        // Diagnostico: verificar se o raio esta
+        // encontrando outro Collider fora da Road Mask.
+        // Loga somente no clique inicial.
+        if (Mouse.current != null &&
+            Mouse.current.leftButton.wasPressedThisFrame)
+        {
+            if (Physics.Raycast(
+                ray,
+                out RaycastHit otherHit,
+                maxDistance,
+                ~0,
+                QueryTriggerInteraction.Ignore))
+            {
+                Debug.LogWarning(
+                    "[ROport Phone] O mouse encontrou: " +
+                    otherHit.collider.name +
+                    " | Layer: " +
+                    LayerMask.LayerToName(
+                        otherHit.collider.gameObject.layer) +
+                    " | Distancia: " +
+                    otherHit.distance);
+            }
+            else
+            {
+                Debug.LogWarning(
+                    "[ROport Phone] Nenhum Collider encontrado. " +
+                    "Origem: " + ray.origin +
+                    " | Direcao: " + ray.direction);
+            }
+        }
+
+        return false;
     }
 
     private void ExtendToward(Vector3 target)

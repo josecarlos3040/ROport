@@ -16,6 +16,10 @@ public class TrickController : MonoBehaviour
     [SerializeField] private TrickScoreManager scoreManager;
     [SerializeField] private RobotAnimationController robotAnimation;
 
+
+    [SerializeField] private TrickVFXController trickVFX;
+
+
     [Header("Trick Zones")]
     [SerializeField] private TrickZone[] zones;
 
@@ -110,6 +114,9 @@ public class TrickController : MonoBehaviour
 
         if (robotAnimation == null)
             robotAnimation = GetComponent<RobotAnimationController>();
+
+        if (trickVFX == null)
+            trickVFX = GetComponent<TrickVFXController>();
     }
 
     private void Start()
@@ -439,6 +446,12 @@ public class TrickController : MonoBehaviour
             robotAnimation.BeginTrick(zone.Animation);
         }
 
+        // Acertou e realmente comecou a manobra.
+        if (activeSuccessful && trickVFX != null)
+        {
+            trickVFX.PlaySuccess();
+        }
+
         // Entrou na escada sem acertar a manobra.
         if (!activeSuccessful && zone.AffectsTravelSpeed)
         {
@@ -517,6 +530,9 @@ public class TrickController : MonoBehaviour
         if (activeZone == null)
             return;
 
+        if (trickVFX != null)
+            trickVFX.StopSuccess();
+
         if (robotAnimation != null)
             robotAnimation.EndTrick();
 
@@ -574,6 +590,9 @@ public class TrickController : MonoBehaviour
     private void StartFallAnimation()
     {
         StopFallAnimation();
+
+        if (trickVFX != null)
+            trickVFX.PlayFailure();
 
         // Reproduz a queda temporaria na rampa.
         if (robotAnimation != null)
