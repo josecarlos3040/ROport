@@ -188,7 +188,12 @@ public class TrickController : MonoBehaviour
         if (keyboard != null &&
             keyboard.fKey.wasPressedThisFrame)
         {
-            PrepareTrick(approachZone, feet);
+            Vector3 timingPosition =
+                approachZone.IsInApproach(feet)
+                    ? feet
+                    : character.position;
+
+            PrepareTrick(approachZone, timingPosition);
         }
     }
 
@@ -213,7 +218,7 @@ public class TrickController : MonoBehaviour
         Vector3 feet,
         Vector3 direction)
     {
-        if (zones == null)
+        if (zones == null || character == null)
             return null;
 
         TrickZone nearest = null;
@@ -223,13 +228,37 @@ public class TrickController : MonoBehaviour
         {
             if (zone == null ||
                 attemptedZones.Contains(zone) ||
-                traversedZones.Contains(zone) ||
-                !zone.IsInApproach(feet) ||
-                zone.IsInTraversal(feet) ||
-                !routeFollower.WillTraverseTrickZone(zone,playerPivotHeight))
+                traversedZones.Contains(zone))
             {
                 continue;
             }
+
+            // Aceita tanto a posicao calculada dos pes
+            // quanto o pivot do personagem.
+            // Isso evita erros de altura nas zonas.
+            bool feetInside = zone.IsInApproach(feet);
+            bool pivotInside =
+                zone.IsInApproach(character.position);
+
+            if (!feetInside && !pivotInside)
+                continue;
+
+            // Nao permite preparar depois que entrou
+            // na zona de execucao.
+            if (zone.IsInTraversal(feet))
+                continue;
+
+            // A rota precisa passar pela zona da manobra.
+            // Testamos as duas referencias de altura
+            // para evitar falsos negativos.
+            bool routeWillTraverse =
+                routeFollower.WillTraverseTrickZone(
+                    zone, playerPivotHeight, 80f) ||
+                routeFollower.WillTraverseTrickZone(
+                    zone, 0f, 80f);
+
+            if (!routeWillTraverse)
+                continue;
 
             float distance =
                 (zone.transform.position - feet).sqrMagnitude;
