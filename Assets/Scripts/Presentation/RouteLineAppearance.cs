@@ -67,19 +67,23 @@ public class RouteLineAppearance : MonoBehaviour
         if (routeLine == null)
             routeLine = GetComponentInChildren<LineRenderer>();
 
-        CreateArrowRenderer();
     }
+
+
+    private bool initialized;
 
     private void OnEnable()
     {
         if (routeDrawer != null)
             routeDrawer.RouteChanged += OnRouteChanged;
 
-        RefreshVisual();
+        if (initialized)
+            RefreshVisual();
     }
 
     private void Start()
     {
+        initialized = true;
         RefreshVisual();
     }
 
@@ -87,12 +91,6 @@ public class RouteLineAppearance : MonoBehaviour
     {
         if (routeDrawer != null)
             routeDrawer.RouteChanged -= OnRouteChanged;
-    }
-
-    private void OnValidate()
-    {
-        if (Application.isPlaying)
-            RefreshVisual();
     }
 
     private void OnRouteChanged(int pointCount)

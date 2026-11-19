@@ -18,18 +18,29 @@ public class TrickZone : MonoBehaviour
     }
 
     [Header("Trick")]
-    [SerializeField] private string trickName = "Salto 360";
+    [SerializeField]
+    private string trickName = "Salto 360";
+
     [SerializeField]
     private TrickAnimation animation =
         TrickAnimation.JumpAndSpin;
 
     [Header("Zones")]
-    [SerializeField] private BoxCollider approachCollider;
-    [SerializeField] private BoxCollider traversalCollider;
+    [SerializeField]
+    private BoxCollider approachCollider;
+
+    [SerializeField]
+    private BoxCollider approachCollider2;
+
+    [SerializeField]
+    private BoxCollider traversalCollider;
 
     [Header("Scoring")]
-    [SerializeField, Min(1)] private int basePoints = 100;
-    [SerializeField] private ZoneAxis scoringAxis = ZoneAxis.Z;
+    [SerializeField, Min(1)]
+    private int basePoints = 100;
+
+    [SerializeField]
+    private ZoneAxis scoringAxis = ZoneAxis.Z;
 
     [SerializeField, Range(0f, 1f)]
     private float perfectWindow = 0.25f;
@@ -38,8 +49,9 @@ public class TrickZone : MonoBehaviour
     private float goodWindow = 0.65f;
 
     [Header("Movement Direction")]
-    public bool OnlyDescending => onlyDescending;
-    [SerializeField] private bool onlyDescending;
+    [SerializeField]
+    private bool onlyDescending = false;
+
     [SerializeField]
     private Vector3 localDownhillDirection =
         Vector3.back;
@@ -48,10 +60,12 @@ public class TrickZone : MonoBehaviour
     private float directionTolerance = 0.7f;
 
     [Header("Speed")]
-    [SerializeField] private bool affectsTravelSpeed = true;
+    [SerializeField]
+    private bool affectsTravelSpeed = true;
 
     public string TrickName => trickName;
     public TrickAnimation Animation => animation;
+    public bool OnlyDescending => onlyDescending;
     public bool AffectsTravelSpeed => affectsTravelSpeed;
 
     private void Awake()
@@ -59,124 +73,199 @@ public class TrickZone : MonoBehaviour
         if (traversalCollider == null)
             traversalCollider = GetComponent<BoxCollider>();
 
-        if (approachCollider == null)
-        {
-            Debug.LogWarning(
-                "[ROport] Approach Collider nao configurado: " +
-                name, this);
-        }
+        if (traversalCollider != null)
+            traversalCollider.isTrigger = true;
 
         if (approachCollider != null)
             approachCollider.isTrigger = true;
 
-        if (traversalCollider != null)
-            traversalCollider.isTrigger = true;
+        if (approachCollider2 != null)
+            approachCollider2.isTrigger = true;
     }
 
-    public bool IsInApproach(Vector3 position)
+    private void OnValidate()
     {
-        return IsInside(approachCollider, position);
+        if (traversalCollider == null)
+            traversalCollider = GetComponent<BoxCollider>();
+
+        goodWindow = Mathf.Max(
+            goodWindow, perfectWindow);
     }
 
-    public bool IsInTraversal(Vector3 position)
-    {
-        return IsInside(traversalCollider, position);
-    }
-
-    // Mantido para compatibilidade com
-    // eventuais scripts antigos.
-    public bool ContainsPoint(Vector3 position)
-    {
-        return IsInTraversal(position);
-    }
-
-    private bool IsInside(
+    // Detecta a posicao mesmo com colliders
+    // rotacionados ou em objetos filhos.
+    private bool IsInsideCollider(
         BoxCollider box,
         Vector3 worldPosition)
     {
-        if (!isActiveAndEnabled ||
-            box == null ||
+        if (box == null ||
             !box.enabled ||
             !box.gameObject.activeInHierarchy)
-        {
             return false;
-        }
 
-        Vector3 local =
-            box.transform.InverseTransformPoint(worldPosition);
+        Vector3 localPosition =
+            box.transform.InverseTransformPoint(
+                worldPosition);
 
-        Vector3 difference = local - box.center;
-        Vector3 half = box.size * 0.5f;
+        Vector3 difference =
+            localPosition - box.center;
 
-        const float tolerance = 0.01f;
+        Vector3 halfSize = box.size * 0.5f;
 
         return
-            Mathf.Abs(difference.x) <= half.x + tolerance &&
-            Mathf.Abs(difference.y) <= half.y + tolerance &&
-            Mathf.Abs(difference.z) <= half.z + tolerance;
+            Mathf.Abs(difference.x) <= halfSize.x &&
+            Mathf.Abs(difference.y) <= halfSize.y &&
+            Mathf.Abs(difference.z) <= halfSize.z;
     }
 
-    // Verifica a direcao ANTES da rampa.
-    // Nao exige movimento vertical, pois o Player
-    // ainda pode estar numa rua plana.
-    public bool AllowsDirection(Vector3 movementDirection)
+    private BoxCollider GetCurrentApproach(
+        Vector3 worldPosition)
     {
-        Vector3 movement = movementDirection;
-        movement.y = 0f;
+        if (IsInsideCollider(
+            approachCollider, worldPosition))
+        {
+            return approachCollider;
+        }
 
-        if (movement.sqrMagnitude < 0.0001f)
+        if (IsInsideCollider(
+            approachCollider2, worldPosition))
+        {
+            return approachCollider2;
+        }
+
+        return null;
+    }
+
+    // Agora reconhece dois Approaches.
+    public bool IsInApproach(Vector3 worldPosition)
+    {
+        if (!isActiveAndEnabled)
+            return false;
+
+        return GetCurrentApproach(worldPosition) != null;
+    }
+
+    public bool IsInTraversal(Vector3 worldPosition)
+    {
+        if (!isActiveAndEnabled)
+            return false;
+
+        return IsInsideCollider(
+            traversalCollider,
+            worldPosition);
+    }
+
+    // Compatibilidade com scripts antigos.
+    public bool ContainsPoint(Vector3 worldPosition)
+    {
+        return IsInTraversal(worldPosition);
+    }
+
+    public bool AllowsDirection(
+        Vector3 movementDirection)
+    {
+        if (movementDirection.sqrMagnitude < 0.0001f)
             return false;
 
         if (!onlyDescending)
             return true;
 
-        Vector3 downhill = transform.TransformDirection(
-            localDownhillDirection);
-
-        downhill.y = 0f;
-
-        if (downhill.sqrMagnitude < 0.0001f)
+        if (movementDirection.y >= -0.02f)
             return false;
 
+        if (localDownhillDirection.sqrMagnitude <
+            0.0001f)
+            return false;
+
+        Vector3 downhill =
+            transform.TransformDirection(
+                localDownhillDirection.normalized);
+
         float alignment = Vector3.Dot(
-            movement.normalized,
+            movementDirection.normalized,
             downhill.normalized);
 
         return alignment >= directionTolerance;
     }
 
-    // Avalia o momento em que F foi apertado
-    // dentro da area de preparacao.
+    // Calcula o timing no Approach correto.
     public bool EvaluateApproachTiming(
-        Vector3 position,
+        Vector3 worldPosition,
         out int points,
         out string rating)
     {
         points = 0;
         rating = "ERROU!";
 
-        if (!IsInApproach(position))
+        BoxCollider usedCollider =
+            GetCurrentApproach(worldPosition);
+
+        if (usedCollider == null)
             return false;
 
-        float progress = GetProgress(
-            approachCollider,
-            position,
-            Vector3.zero);
+        return EvaluateColliderTiming(
+            usedCollider,
+            worldPosition,
+            out points,
+            out rating);
+    }
 
-        float distanceFromCenter =
-            Mathf.Abs(progress - 0.5f) * 2f;
+    private bool EvaluateColliderTiming(
+        BoxCollider box,
+        Vector3 worldPosition,
+        out int points,
+        out string rating)
+    {
+        points = 0;
+        rating = "ERROU!";
 
-        if (distanceFromCenter <= perfectWindow)
+        if (box == null)
+            return false;
+
+        Vector3 localPosition =
+            box.transform.InverseTransformPoint(
+                worldPosition);
+
+        Vector3 difference =
+            localPosition - box.center;
+
+        Vector3 halfSize =
+            box.size * 0.5f;
+
+        float distanceFromCenter;
+        float halfLength;
+
+        if (scoringAxis == ZoneAxis.X)
+        {
+            distanceFromCenter =
+                Mathf.Abs(difference.x);
+
+            halfLength = halfSize.x;
+        }
+        else
+        {
+            distanceFromCenter =
+                Mathf.Abs(difference.z);
+
+            halfLength = halfSize.z;
+        }
+
+        float normalizedDistance =
+            distanceFromCenter /
+            Mathf.Max(halfLength, 0.001f);
+
+        if (normalizedDistance <= perfectWindow)
         {
             points = basePoints * 2;
             rating = "PERFEITA!";
             return true;
         }
 
-        if (distanceFromCenter <=
-            Mathf.Max(goodWindow, perfectWindow))
+        if (normalizedDistance <= goodWindow)
         {
-            points = Mathf.RoundToInt(basePoints * 1.5f);
+            points = Mathf.RoundToInt(
+                basePoints * 1.5f);
+
             rating = "BOA!";
             return true;
         }
@@ -184,94 +273,114 @@ public class TrickZone : MonoBehaviour
         return false;
     }
 
-    // Mantido para compatibilidade.
+    // Compatibilidade com a versao anterior.
     public bool EvaluateTiming(
-        Vector3 position,
+        Vector3 worldPosition,
         out int points,
         out string rating)
     {
-        return EvaluateApproachTiming(
-            position, out points, out rating);
-    }
+        points = 0;
+        rating = "ERROU!";
 
-    // Retorna 0 na entrada e 1 na saida
-    // da zona de execucao.
-    public float GetTraversalProgress(
-        Vector3 position,
-        Vector3 movementDirection)
-    {
-        return GetProgress(
+        if (!IsInTraversal(worldPosition))
+            return false;
+
+        return EvaluateColliderTiming(
             traversalCollider,
-            position,
-            movementDirection);
+            worldPosition,
+            out points,
+            out rating);
     }
 
-    private float GetProgress(
-        BoxCollider box,
+    // Progresso da travessia: 0 a 1.
+    // Usado para animar saltos e grinds.
+    public float GetTraversalProgress(
         Vector3 worldPosition,
         Vector3 movementDirection)
     {
-        if (box == null)
+        if (traversalCollider == null)
             return 0f;
 
         Vector3 localPosition =
-            box.transform.InverseTransformPoint(worldPosition)
-            - box.center;
+            traversalCollider.transform
+                .InverseTransformPoint(worldPosition);
 
-        Vector3 halfSize = box.size * 0.5f;
-
-        float coordinate = scoringAxis == ZoneAxis.X
-            ? localPosition.x
-            : localPosition.z;
-
-        float halfLength = scoringAxis == ZoneAxis.X
-            ? halfSize.x
-            : halfSize.z;
-
-        float progress = Mathf.InverseLerp(
-            -halfLength,
-            halfLength,
-            coordinate);
-
-        if (movementDirection.sqrMagnitude > 0.0001f)
-        {
-            Vector3 localDirection =
-                box.transform.InverseTransformDirection(
+        Vector3 localDirection =
+            traversalCollider.transform
+                .InverseTransformDirection(
                     movementDirection);
 
-            float axisDirection = scoringAxis == ZoneAxis.X
-                ? localDirection.x
-                : localDirection.z;
+        Vector3 difference =
+            localPosition - traversalCollider.center;
 
-            if (axisDirection < 0f)
-                progress = 1f - progress;
+        float coordinate;
+        float halfLength;
+        float directionSign;
+
+        if (scoringAxis == ZoneAxis.X)
+        {
+            coordinate = difference.x;
+            halfLength =
+                traversalCollider.size.x * 0.5f;
+
+            directionSign = localDirection.x;
         }
+        else
+        {
+            coordinate = difference.z;
+            halfLength =
+                traversalCollider.size.z * 0.5f;
+
+            directionSign = localDirection.z;
+        }
+
+        float progress =
+            (coordinate /
+            Mathf.Max(halfLength, 0.001f) + 1f)
+            * 0.5f;
+
+        // Inverte o progresso caso o personagem
+        // atravesse a zona no sentido contrario.
+        if (directionSign < 0f)
+            progress = 1f - progress;
 
         return Mathf.Clamp01(progress);
     }
 
-    private void OnDrawGizmosSelected()
-    {
-        DrawZone(approachCollider, Color.yellow);
-
-        BoxCollider execution = traversalCollider != null
-            ? traversalCollider
-            : GetComponent<BoxCollider>();
-
-        DrawZone(execution, Color.cyan);
-    }
-
-    private void DrawZone(BoxCollider box, Color color)
+    private void DrawCollider(
+        BoxCollider box,
+        Color color)
     {
         if (box == null)
             return;
 
-        Matrix4x4 originalMatrix = Gizmos.matrix;
+        Gizmos.matrix =
+            box.transform.localToWorldMatrix;
 
-        Gizmos.matrix = box.transform.localToWorldMatrix;
         Gizmos.color = color;
 
-        Gizmos.DrawWireCube(box.center, box.size);
+        Gizmos.DrawWireCube(
+            box.center,
+            box.size);
+    }
+
+    private void OnDrawGizmosSelected()
+    {
+        Matrix4x4 originalMatrix = Gizmos.matrix;
+
+        DrawCollider(
+            traversalCollider != null
+                ? traversalCollider
+                : GetComponent<BoxCollider>(),
+            Color.cyan);
+
+        DrawCollider(
+            approachCollider,
+            Color.yellow);
+
+        DrawCollider(
+            approachCollider2,
+            Color.green);
 
         Gizmos.matrix = originalMatrix;
     }
