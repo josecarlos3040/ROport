@@ -3230,6 +3230,7 @@ GameObject:
   m_Component:
   - component: {fileID: 129052040}
   - component: {fileID: 129052041}
+  - component: {fileID: 129052042}
   m_Layer: 0
   m_Name: RouteSystem
   m_TagString: Untagged
@@ -3280,6 +3281,29 @@ MonoBehaviour:
   lineHeight: 0.15
   easyStartOnPhone: 1
   playerPivotHeight: 1
+--- !u!114 &129052042
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 129052039}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 49fcbf3f94e67734c9d38e8c4f39cc19, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::RouteLineAppearance
+  routeDrawer: {fileID: 129052041}
+  routeLine: {fileID: 1801470856}
+  visualMaterial: {fileID: 2100000, guid: 8695eb7fb2d11384a9c4ce1614138f2c, type: 2}
+  style: 1
+  routeColor: {r: 0.1, g: 0.9, b: 1, a: 1}
+  opacity: 0.65
+  lineWidth: 0.35
+  arrowSpacing: 5
+  arrowLength: 3
+  arrowWidth: 1.4
+  arrowHeightOffset: 0.08
 --- !u!1 &129222882 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 6420099070473554456, guid: 3a2031a1385bdf047b6e6c84b0dcf941, type: 3}
@@ -4632,15 +4656,15 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 1, g: 1, b: 1, a: 0.392}
+  m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 10907, guid: 0000000000000000f000000000000000, type: 0}
-  m_Type: 1
+  m_Sprite: {fileID: 21300000, guid: 10ab2aee0e9f3f54aac8b64e8ad321c8, type: 3}
+  m_Type: 0
   m_PreserveAspect: 0
   m_FillCenter: 1
   m_FillMethod: 4
@@ -7181,8 +7205,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 0, y: 0}
-  m_AnchoredPosition: {x: 640, y: 360}
-  m_SizeDelta: {x: 360, y: 150}
+  m_AnchoredPosition: {x: 605.25, y: 360}
+  m_SizeDelta: {x: 360, y: 180}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!1 &792933776 stripped
 GameObject:
@@ -7940,6 +7964,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ROportCameraController
   mainCamera: {fileID: 1004589291}
   player: {fileID: 1986707013}
+  cityCenter: {fileID: 490910112}
   runManager: {fileID: 233408707}
   routeFollower: {fileID: 1986707014}
   robotAnimation: {fileID: 1986707018}
@@ -7949,11 +7974,14 @@ MonoBehaviour:
   playerSpriteVisual: {fileID: 2127648359}
   mapMarker: {fileID: 1157725024}
   executionSize: 6
-  executionOrbitAngle: 80
   executionDistance: 30
   executionHeight: 6
   executionLookHeight: 3
   lookAhead: 5
+  faceCityCenterOnFirstFloor: 1
+  cityDirectionRotationSpeed: 5
+  centerDirectionDeadZone: 2
+  executionOrbitAngle: 80
   enableSecondFloorView: 1
   secondFloorEnterHeight: 8.5
   secondFloorExitHeight: 7
@@ -8249,6 +8277,55 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 90, y: 0, z: 0}
+--- !u!1 &1012724717
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1012724718}
+  - component: {fileID: 1012724719}
+  m_Layer: 0
+  m_Name: CheckpointVFXSystem
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1012724718
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1012724717}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1326919195}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1012724719
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1012724717}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a0d776704306bd7449dc586e27b53af2, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::CheckpointArrivalVFX
+  runManager: {fileID: 233408707}
+  player: {fileID: 1986707013}
+  checkpointVFXPrefab: {fileID: 7559904128449517292, guid: 6cf79534e6587c94eb34779e3e3e0be8, type: 3}
+  spawnOffset: {x: 0, y: 0.5, z: 0}
+  effectDuration: 5
 --- !u!1 &1015381512 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 6196573418231754669, guid: 3a2031a1385bdf047b6e6c84b0dcf941, type: 3}
@@ -9468,7 +9545,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 71.3, y: -48.9}
+  m_AnchoredPosition: {x: 51.300003, y: -18.900002}
   m_SizeDelta: {x: 160, y: 20}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1187822302
@@ -10107,7 +10184,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 1}
   m_AnchorMax: {x: 0.5, y: 1}
-  m_AnchoredPosition: {x: 0, y: 0}
+  m_AnchoredPosition: {x: 0, y: -20}
   m_SizeDelta: {x: 200, y: 50}
   m_Pivot: {x: 0.5, y: 1}
 --- !u!114 &1281336598
@@ -10132,15 +10209,15 @@ MonoBehaviour:
       m_Calls: []
   m_text: New Text
   m_isRightToLeft: 0
-  m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
-  m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
+  m_fontAsset: {fileID: 11400000, guid: 61f38dd4eb40e21469760e67fd1a7073, type: 2}
+  m_sharedMaterial: {fileID: 1104454027744202275, guid: 61f38dd4eb40e21469760e67fd1a7073, type: 2}
   m_fontSharedMaterials: []
   m_fontMaterial: {fileID: 0}
   m_fontMaterials: []
   m_fontColor32:
     serializedVersion: 2
-    rgba: 4294967295
-  m_fontColor: {r: 1, g: 1, b: 1, a: 1}
+    rgba: 4278190080
+  m_fontColor: {r: 0, g: 0, b: 0, a: 1}
   m_enableVertexGradient: 0
   m_colorMode: 3
   m_fontColorGradient:
@@ -10163,7 +10240,7 @@ MonoBehaviour:
   m_enableAutoSizing: 0
   m_fontSizeMin: 18
   m_fontSizeMax: 72
-  m_fontStyle: 0
+  m_fontStyle: 1
   m_HorizontalAlignment: 1
   m_VerticalAlignment: 256
   m_textAlignment: 65535
@@ -10196,7 +10273,7 @@ MonoBehaviour:
   m_VertexBufferAutoSizeReduction: 0
   m_useMaxVisibleDescender: 1
   m_pageToDisplay: 1
-  m_margin: {x: 0, y: 0, z: 0, w: 0}
+  m_margin: {x: -43.02246, y: 0, z: -49.455566, w: 0}
   m_isUsingLegacyAnimationComponent: 0
   m_isVolumetricText: 0
   m_hasFontAssetChanged: 0
@@ -10408,6 +10485,7 @@ Transform:
   - {fileID: 346502612}
   - {fileID: 1532269786}
   - {fileID: 404276156}
+  - {fileID: 1012724718}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1334967186
@@ -12713,7 +12791,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 0, y: 387.26416}
+  m_AnchoredPosition: {x: -20.754719, y: 497.6415}
   m_SizeDelta: {x: 200, y: 50}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1675547999
@@ -12736,7 +12814,9 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: '[E] FOTOGRAFAR'
+  m_text: 'Aperte para
+
+    [E] FOTOGRAFAR'
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 61f38dd4eb40e21469760e67fd1a7073, type: 2}
   m_sharedMaterial: {fileID: 1104454027744202275, guid: 61f38dd4eb40e21469760e67fd1a7073, type: 2}
@@ -12745,8 +12825,8 @@ MonoBehaviour:
   m_fontMaterials: []
   m_fontColor32:
     serializedVersion: 2
-    rgba: 4288622592
-  m_fontColor: {r: 0, g: 0.18947586, b: 0.6226415, a: 1}
+    rgba: 4278199551
+  m_fontColor: {r: 1, g: 0.1415726, b: 0, a: 1}
   m_enableVertexGradient: 0
   m_colorMode: 3
   m_fontColorGradient:
@@ -12763,8 +12843,8 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 36
-  m_fontSizeBase: 36
+  m_fontSize: 90
+  m_fontSizeBase: 90
   m_fontWeight: 400
   m_enableAutoSizing: 0
   m_fontSizeMin: 18
@@ -12780,7 +12860,7 @@ MonoBehaviour:
   m_lineSpacingMax: 0
   m_paragraphSpacing: 0
   m_charWidthMaxAdj: 0
-  m_TextWrappingMode: 1
+  m_TextWrappingMode: 0
   m_wordWrappingRatios: 0.4
   m_overflowMode: 0
   m_linkedTextComponent: {fileID: 0}
