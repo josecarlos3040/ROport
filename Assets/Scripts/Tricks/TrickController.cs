@@ -575,11 +575,12 @@ public class TrickController : MonoBehaviour
     {
         StopFallAnimation();
 
-        // Nova animacao de impacto do artista.
+        // Reproduz a queda temporaria na rampa.
         if (robotAnimation != null)
-            robotAnimation.PlayImpact();
+            robotAnimation.PlayRampFall();
 
-        // Mantem o movimento de tropeço existente.
+        // Mantem o efeito fisico/visual de tropeco
+        // que ja existia no jogo.
         if (playerVisual != null)
             fallCoroutine = StartCoroutine(AnimateFall());
     }

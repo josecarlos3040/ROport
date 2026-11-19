@@ -20,9 +20,12 @@ public class RobotAnimationController : MonoBehaviour
     [SerializeField] private RouteFollower routeFollower;
     [SerializeField] private ROportRunManager runManager;
     [SerializeField] private CityProgressManager cityProgressManager;
-    [SerializeField] private RobotAnimationController robotAnimation;
 
-    [Header("One-Shot Durations")]
+    [Header("Animation Durations")]
+
+    [SerializeField, Min(0.1f)]
+    private float fallDuration = 1f;
+
     [SerializeField, Min(0.1f)]
     private float photoDuration = 0.6f;
 
@@ -55,12 +58,20 @@ public class RobotAnimationController : MonoBehaviour
 
     private int currentStateHash;
 
+    private bool deathActive;
     private bool trickActive;
     private RobotAnimation trickAnimation;
 
     private bool temporaryActive;
     private RobotAnimation temporaryAnimation;
     private float temporaryTimer;
+
+    // A camera consulta essa propriedade.
+    public bool IsFallAnimationActive =>
+        deathActive ||
+        (temporaryActive &&
+         (temporaryAnimation == RobotAnimation.Impact ||
+          temporaryAnimation == RobotAnimation.Fall));
 
     private void Awake()
     {
@@ -69,9 +80,6 @@ public class RobotAnimationController : MonoBehaviour
 
         if (spriteAnimator != null)
             spriteAnimator.applyRootMotion = false;
-
-        if (robotAnimation == null)
-            robotAnimation = GetComponent<RobotAnimationController>();
     }
 
     private void OnEnable()
@@ -80,6 +88,11 @@ public class RobotAnimationController : MonoBehaviour
         {
             cityProgressManager.PhotoRecorded +=
                 OnPhotoRecorded;
+        }
+
+        if (runManager != null)
+        {
+            runManager.PhaseChanged += OnPhaseChanged;
         }
     }
 
@@ -90,32 +103,40 @@ public class RobotAnimationController : MonoBehaviour
             cityProgressManager.PhotoRecorded -=
                 OnPhotoRecorded;
         }
+
+        if (runManager != null)
+        {
+            runManager.PhaseChanged -= OnPhaseChanged;
+        }
     }
 
     private void Update()
     {
-        if (spriteAnimator == null || runManager == null)
+        if (spriteAnimator == null)
             return;
 
-        // Morte tem prioridade sobre qualquer animacao.
-        if (runManager.Phase == RunPhase.Dead)
+        // MORTE: nenhuma outra animacao pode
+        // sobrescrever ROFall.
+        if (deathActive)
         {
             PlayState(RobotAnimation.Fall);
             return;
         }
 
-        // Fora da execucao, o robo fica parado.
+        if (runManager == null)
+            return;
+
+        // Fora da execucao, fica parado.
         if (runManager.Phase != RunPhase.Executing)
         {
             trickActive = false;
             temporaryActive = false;
-            temporaryTimer = 0f;
 
             PlayState(RobotAnimation.Stay);
             return;
         }
 
-        // Animacoes temporarias, como foto e impacto.
+        // Fotografias e impactos.
         if (temporaryActive)
         {
             temporaryTimer -= Time.deltaTime;
@@ -129,14 +150,14 @@ public class RobotAnimationController : MonoBehaviour
             temporaryActive = false;
         }
 
-        // Manobra ativa enquanto percorre sua zona.
+        // Salto ou grind.
         if (trickActive)
         {
             PlayState(trickAnimation);
             return;
         }
 
-        // Movimento automatico pela rota.
+        // Movimento normal.
         bool moving =
             routeFollower != null &&
             routeFollower.IsFollowing &&
@@ -150,11 +171,11 @@ public class RobotAnimationController : MonoBehaviour
 
     public void BeginTrick(TrickAnimation animation)
     {
+        if (deathActive)
+            return;
+
         trickActive = true;
 
-        // Grind usa slide.
-        // Jump, Spin e JumpAndSpin usam Jump
-        // ate termos animacoes especificas para giro.
         trickAnimation =
             animation == TrickAnimation.Grind
                 ? RobotAnimation.Slide
@@ -183,6 +204,47 @@ public class RobotAnimationController : MonoBehaviour
             photoDuration);
     }
 
+    public void PlayRampFall()
+    {
+        PlayTemporary(
+            RobotAnimation.Fall,
+            fallDuration);
+    }
+
+    // Chamado quando o personagem MORRE.
+    public void PlayDeath()
+    {
+        if (deathActive)
+            return;
+
+        deathActive = true;
+        trickActive = false;
+        temporaryActive = false;
+        temporaryTimer = 0f;
+
+        currentStateHash = 0;
+
+        PlayState(RobotAnimation.Fall);
+
+        Debug.Log("[ROport] Animacao de morte iniciada.");
+    }
+
+    public void ResetDeath()
+    {
+        deathActive = false;
+        trickActive = false;
+        temporaryActive = false;
+        temporaryTimer = 0f;
+
+        currentStateHash = 0;
+    }
+
+    private void OnPhaseChanged(RunPhase phase)
+    {
+        if (phase == RunPhase.Planning)
+            ResetDeath();
+    }
+
     private void OnPhotoRecorded(CityProblem problem)
     {
         PlayPhoto();
@@ -192,15 +254,19 @@ public class RobotAnimationController : MonoBehaviour
         RobotAnimation animation,
         float duration)
     {
-        if (runManager == null ||
+        if (deathActive ||
+            runManager == null ||
             runManager.Phase != RunPhase.Executing)
         {
             return;
         }
 
         temporaryAnimation = animation;
-        temporaryTimer = Mathf.Max(0.1f, duration);
+        temporaryTimer = duration;
         temporaryActive = true;
+
+        // Permite reiniciar um impacto consecutivo.
+        currentStateHash = 0;
 
         PlayState(animation);
     }
@@ -247,7 +313,6 @@ public class RobotAnimationController : MonoBehaviour
 
         int hash = GetStateHash(animation);
 
-        // Evita reiniciar o clip a cada frame.
         if (currentStateHash == hash)
             return;
 
@@ -256,7 +321,7 @@ public class RobotAnimationController : MonoBehaviour
             if (missingStates.Add(hash))
             {
                 Debug.LogWarning(
-                    "[ROport Animation] Estado nao encontrado: " +
+                    "[ROport] Estado nao encontrado: " +
                     animation,
                     spriteAnimator);
             }
@@ -266,5 +331,13 @@ public class RobotAnimationController : MonoBehaviour
 
         spriteAnimator.Play(hash, 0, 0f);
         currentStateHash = hash;
+    }
+
+    // Teste manual pelo Inspector.
+    [ContextMenu("ROport - Testar Animacao de Morte")]
+    private void TestDeath()
+    {
+        if (Application.isPlaying)
+            PlayDeath();
     }
 }
