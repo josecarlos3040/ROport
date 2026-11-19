@@ -512,6 +512,8 @@ public class TrickController : MonoBehaviour
             if (trickVFX != null)
                 trickVFX.PlaySuccess();
 
+            ROportAudioManager.Instance?.PlayTrickSuccess();
+
             return;
         }
 
@@ -522,6 +524,7 @@ public class TrickController : MonoBehaviour
         }
         else if (zone.AffectsTravelSpeed)
         {
+            ROportAudioManager.Instance?.PlayTrickFailure();
             // Mantem o comportamento das escadas.
             ShowFeedback(
                 "ERROU A MANOBRA!\nVELOCIDADE REDUZIDA");
@@ -534,17 +537,27 @@ public class TrickController : MonoBehaviour
     // PROBLEM FAILURE
     // ==================================================
 
-    private void ApplyCityProblemFailure(
-        CityProblem problem)
+    private void ApplyCityProblemFailure(CityProblem problem)
     {
         if (problem == null)
             return;
 
-        // Impede que a colisao e a zona de manobra
-        // apliquem a falha duas vezes na mesma rota.
+        // Evita aplicar a mesma falha duas vezes.
         if (!failedCityProblems.Add(problem))
             return;
 
+        // AUDIO DE ERRO
+        if (ROportAudioManager.Instance != null)
+        {
+            ROportAudioManager.Instance.PlayTrickFailure();
+        }
+        else
+        {
+            Debug.LogWarning(
+                "[ROport Audio] AudioManager nao encontrado!");
+        }
+
+        // LENTIDAO
         if (routeFollower != null)
         {
             routeFollower.ApplySlowdown(
@@ -552,16 +565,17 @@ public class TrickController : MonoBehaviour
                 cityProblemMissDuration);
         }
 
+        // FEEDBACK
         ShowFeedback(
             "TROPECOU!\nVELOCIDADE REDUZIDA");
 
+        // ANIMACAO ROFALL + VFX
         StartFallAnimation();
 
         Debug.Log(
             "[ROport Trick] Falha em " +
             problem.DisplayName +
-            " | Multiplicador: " +
-            cityProblemMissMultiplier);
+            " | Som de erro solicitado.");
     }
 
     // Evento recebido ao atingir um problema urbano.
@@ -612,6 +626,7 @@ public class TrickController : MonoBehaviour
 
         ApplyCityProblemFailure(problem);
         SetHint("");
+
     }
 
     private bool HasProtectedJump(CityProblem problem)

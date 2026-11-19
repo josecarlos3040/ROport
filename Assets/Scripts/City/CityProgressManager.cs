@@ -111,6 +111,8 @@ public class CityProgressManager : MonoBehaviour
 
         PhotoRecorded?.Invoke(problem);
 
+        ROportAudioManager.Instance?.PlayPhoto();
+
         Debug.Log(
             "[ROport] Fotografia pendente: " +
             problem.DisplayName);

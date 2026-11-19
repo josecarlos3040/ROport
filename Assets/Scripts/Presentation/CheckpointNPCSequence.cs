@@ -21,7 +21,7 @@ public class CheckpointNPCSequence : MonoBehaviour
         if (runManager == null)
         {
             runManager =
-                FindFirstObjectByType<ROportRunManager>();
+                FindAnyObjectByType<ROportRunManager>();
         }
 
         ResetSequence();
