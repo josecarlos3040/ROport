@@ -14,6 +14,7 @@ public class ROportCameraController : MonoBehaviour
     [Header("References")]
     [SerializeField] private Camera mainCamera;
     [SerializeField] private Transform player;
+    [SerializeField] private Transform cityCenter;
     [SerializeField] private ROportRunManager runManager;
     [SerializeField] private RouteFollower routeFollower;
     [SerializeField] private RobotAnimationController robotAnimation;
@@ -27,18 +28,34 @@ public class ROportCameraController : MonoBehaviour
     [SerializeField, Min(0.1f)]
     private float executionSize = 9f;
 
-    [SerializeField, Range(-180f, 180f)]
-    private float executionOrbitAngle = 80f;
-
     [SerializeField, Min(1f)]
     private float executionDistance = 12f;
 
-    [SerializeField] private float executionHeight = 7f;
-    [SerializeField] private float executionLookHeight = 1f;
-    [SerializeField] private float lookAhead = 1.5f;
+    [SerializeField]
+    private float executionHeight = 7f;
 
-    [Header("Second Floor Camera")]
-    [SerializeField] private bool enableSecondFloorView = true;
+    [SerializeField]
+    private float executionLookHeight = 1f;
+
+    [SerializeField]
+    private float lookAhead = 1.5f;
+
+    [Header("First Floor - City Center")]
+    [SerializeField]
+    private bool faceCityCenterOnFirstFloor = true;
+
+    [SerializeField, Min(0.1f)]
+    private float cityDirectionRotationSpeed = 5f;
+
+    [SerializeField, Min(0f)]
+    private float centerDirectionDeadZone = 2f;
+
+    [Header("Execution Camera - Second Floor")]
+    [SerializeField, Range(-180f, 180f)]
+    private float executionOrbitAngle = 80f;
+
+    [SerializeField]
+    private bool enableSecondFloorView = true;
 
     [SerializeField]
     private float secondFloorEnterHeight = 8.5f;
@@ -59,7 +76,8 @@ public class ROportCameraController : MonoBehaviour
     private float floorTransitionDuration = 1f;
 
     [Header("Player")]
-    [SerializeField] private float playerPivotHeight = 1f;
+    [SerializeField]
+    private float playerPivotHeight = 1f;
 
     [Header("Phone Planning Camera")]
     [SerializeField]
@@ -100,14 +118,14 @@ public class ROportCameraController : MonoBehaviour
     private bool originalSpriteActive;
     private bool originalMarkerActive;
 
-    // Ultima direcao real do movimento em execucao.
     private Vector3 lastValidForward = Vector3.forward;
 
-    // Posicao anterior usada para calcular movimento.
     private Vector3 lastExecutionPlayerPosition;
     private bool hasExecutionPlayerPosition;
 
-    // Segundo andar.
+    private Vector3 currentCityDirection = Vector3.forward;
+    private bool hasCityDirection;
+
     private bool isOnUpperFloor;
     private float upperFloorBlend;
 
@@ -145,9 +163,7 @@ public class ROportCameraController : MonoBehaviour
         initialForward.y = 0f;
 
         if (initialForward.sqrMagnitude > 0.0001f)
-        {
             lastValidForward = initialForward.normalized;
-        }
 
         lastExecutionPlayerPosition = player.position;
         hasExecutionPlayerPosition = true;
@@ -166,8 +182,16 @@ public class ROportCameraController : MonoBehaviour
             Debug.LogWarning(
                 "[ROport Camera] Referencias incompletas.",
                 this);
-
             return;
+        }
+
+        if (faceCityCenterOnFirstFloor &&
+            cityCenter == null)
+        {
+            Debug.LogWarning(
+                "[ROport Camera] CityCenter nao atribuido. " +
+                "Usando direcao do movimento.",
+                this);
         }
 
         OnPhaseChanged(runManager.Phase);
@@ -179,7 +203,6 @@ public class ROportCameraController : MonoBehaviour
         if (mainCamera == null || player == null)
             return;
 
-        // Nao mexe na camera enquanto desenha.
         bool isDrawing =
             currentView == CameraView.Planning &&
             Mouse.current != null &&
@@ -188,14 +211,13 @@ public class ROportCameraController : MonoBehaviour
         if (isDrawing)
             return;
 
-        // Congela a camera durante a queda.
+        // Evita que a queda mova a camera.
         if (robotAnimation != null &&
             robotAnimation.IsFallAnimationActive)
         {
             positionVelocity = Vector3.zero;
             zoomVelocity = 0f;
 
-            // Ignora deslocamentos provocados pela queda.
             if (currentView == CameraView.Following)
             {
                 lastExecutionPlayerPosition = player.position;
@@ -237,19 +259,16 @@ public class ROportCameraController : MonoBehaviour
 
         UpdateVisibility();
 
-        // Voltando do planejamento para a execucao.
         if (view == CameraView.Following &&
             previousView != CameraView.Following &&
             player != null)
         {
-            // Ignora movimentos realizados durante
-            // o planejamento.
+            // Ignora deslocamentos durante planejamento.
             lastExecutionPlayerPosition = player.position;
             hasExecutionPlayerPosition = true;
 
-            // Retorna diretamente para a camera
-            // de execucao usando a ultima direcao
-            // real do jogador.
+            // Volta diretamente ao enquadramento
+            // de execucao, sem girar pela cidade.
             UpdateCamera(true);
         }
     }
@@ -280,30 +299,23 @@ public class ROportCameraController : MonoBehaviour
             Vector3.up * playerPivotHeight;
     }
 
-    // ==================================================
-    // DIRECAO REAL DA EXECUCAO
-    // ==================================================
-
+    // Direcao real do movimento.
+    // So muda durante execucao.
     private Vector3 GetPlayerForward()
     {
         if (player == null)
             return lastValidForward;
 
-        // Durante planejamento ou finalizacao,
-        // nao alteramos a direcao de execucao.
         if (currentView != CameraView.Following)
             return lastValidForward;
 
-        // Inicializa a posicao anterior.
         if (!hasExecutionPlayerPosition)
         {
             lastExecutionPlayerPosition = player.position;
             hasExecutionPlayerPosition = true;
-
             return lastValidForward;
         }
 
-        // Calcula quanto o player realmente andou.
         Vector3 displacement =
             player.position - lastExecutionPlayerPosition;
 
@@ -311,7 +323,6 @@ public class ROportCameraController : MonoBehaviour
 
         lastExecutionPlayerPosition = player.position;
 
-        // So atualiza se estiver realmente andando.
         if (routeFollower != null &&
             routeFollower.IsFollowing &&
             !routeFollower.IsBlocked &&
@@ -323,15 +334,61 @@ public class ROportCameraController : MonoBehaviour
         return lastValidForward;
     }
 
-    // ==================================================
-    // CAMERA DE PLANEJAMENTO
-    // ==================================================
+    // Direcao horizontal do Player para CityCenter.
+    // Usada somente no primeiro andar.
+    private Vector3 GetCityDirection(bool instant)
+    {
+        if (!faceCityCenterOnFirstFloor ||
+            cityCenter == null ||
+            player == null)
+        {
+            return lastValidForward;
+        }
 
+        Vector3 direction =
+            cityCenter.position - player.position;
+
+        direction.y = 0f;
+
+        // Evita uma virada brusca quando o
+        // robo passa muito perto do centro.
+        if (direction.sqrMagnitude <
+            centerDirectionDeadZone *
+            centerDirectionDeadZone)
+        {
+            return hasCityDirection
+                ? currentCityDirection
+                : lastValidForward;
+        }
+
+        direction.Normalize();
+
+        if (!hasCityDirection || instant)
+        {
+            currentCityDirection = direction;
+            hasCityDirection = true;
+        }
+        else if (currentView == CameraView.Following)
+        {
+            currentCityDirection =
+                Vector3.RotateTowards(
+                    currentCityDirection,
+                    direction,
+                    cityDirectionRotationSpeed *
+                    Mathf.Deg2Rad *
+                    Time.deltaTime,
+                    0f).normalized;
+        }
+
+        return currentCityDirection;
+    }
+
+    // Camera do planejamento: independente
+    // da direcao do movimento e do CityCenter.
     private void GetPhonePlanningPose(
         out Vector3 desiredPosition,
         out Quaternion desiredRotation)
     {
-        // Rotacao manual pelo Inspector.
         desiredRotation =
             Quaternion.Euler(phonePlanningRotation);
 
@@ -355,10 +412,6 @@ public class ROportCameraController : MonoBehaviour
             + cameraUp * phonePlanningHeight;
     }
 
-    // ==================================================
-    // CONTROLE DO SEGUNDO ANDAR
-    // ==================================================
-
     private void UpdateFloorState(bool instant)
     {
         if (!enableSecondFloorView || player == null)
@@ -376,10 +429,9 @@ public class ROportCameraController : MonoBehaviour
             if (groundHeight <= secondFloorExitHeight)
                 isOnUpperFloor = false;
         }
-        else
+        else if (groundHeight >= secondFloorEnterHeight)
         {
-            if (groundHeight >= secondFloorEnterHeight)
-                isOnUpperFloor = true;
+            isOnUpperFloor = true;
         }
 
         float targetBlend =
@@ -388,18 +440,16 @@ public class ROportCameraController : MonoBehaviour
         if (instant || floorTransitionDuration <= 0f)
         {
             upperFloorBlend = targetBlend;
-            return;
         }
-
-        upperFloorBlend = Mathf.MoveTowards(
-            upperFloorBlend,
-            targetBlend,
-            Time.deltaTime / floorTransitionDuration);
+        else
+        {
+            upperFloorBlend = Mathf.MoveTowards(
+                upperFloorBlend,
+                targetBlend,
+                Time.deltaTime /
+                floorTransitionDuration);
+        }
     }
-
-    // ==================================================
-    // CAMERA DE EXECUCAO
-    // ==================================================
 
     private void GetExecutionPose(
         bool instant,
@@ -409,44 +459,46 @@ public class ROportCameraController : MonoBehaviour
     {
         UpdateFloorState(instant);
 
-        // Usa a direcao REAL do movimento.
-        // Nao usa a rotacao da camera de planejamento.
-        Vector3 forward = GetPlayerForward();
+        Vector3 moveForward = GetPlayerForward();
+        moveForward.y = 0f;
 
-        forward.y = 0f;
+        if (moveForward.sqrMagnitude < 0.0001f)
+            moveForward = Vector3.forward;
 
-        if (forward.sqrMagnitude < 0.0001f)
-            forward = Vector3.forward;
+        moveForward.Normalize();
 
-        forward.Normalize();
+        Vector3 target = GetPlayerGroundPosition();
+        target += Vector3.up * executionLookHeight;
 
+        // PRIMEIRO ANDAR
+        // Camera sempre do lado de fora,
+        // olhando na direcao do centro da cidade.
+        Vector3 cityForward =
+            GetCityDirection(instant);
+
+        Vector3 firstFloorTarget =
+            target + cityForward * lookAhead;
+
+        Vector3 firstFloorPosition =
+            target
+            - cityForward * executionDistance
+            + Vector3.up * executionHeight;
+
+        // SEGUNDO ANDAR
+        // Camera mais top-down e dinamica.
         Vector3 right =
             Vector3.Cross(
                 Vector3.up,
-                forward).normalized;
+                moveForward).normalized;
 
         float angle =
             executionOrbitAngle * Mathf.Deg2Rad;
 
-        // A camera gira quando o robo muda
-        // a direcao do movimento.
-        Vector3 orbitDirection =
-            forward * Mathf.Cos(angle) +
+        Vector3 upperOrbitDirection =
+            moveForward * Mathf.Cos(angle) +
             right * Mathf.Sin(angle);
 
-        orbitDirection.Normalize();
-
-        Vector3 target = GetPlayerGroundPosition();
-
-        if (currentView == CameraView.Following)
-            target += forward * lookAhead;
-
-        target += Vector3.up * executionLookHeight;
-
-        float cameraHeight = Mathf.Lerp(
-            executionHeight,
-            upperFloorHeight,
-            upperFloorBlend);
+        upperOrbitDirection.Normalize();
 
         float upperPitchRadians =
             upperFloorPitch * Mathf.Deg2Rad;
@@ -455,18 +507,28 @@ public class ROportCameraController : MonoBehaviour
             upperFloorHeight /
             Mathf.Tan(upperPitchRadians);
 
-        float horizontalDistance = Mathf.Lerp(
-            executionDistance,
-            upperHorizontalDistance,
+        Vector3 upperTarget =
+            target + moveForward * lookAhead;
+
+        Vector3 upperPosition =
+            upperTarget
+            + upperOrbitDirection *
+              upperHorizontalDistance
+            + Vector3.up * upperFloorHeight;
+
+        // Transicao suave entre as duas cameras.
+        desiredPosition = Vector3.Lerp(
+            firstFloorPosition,
+            upperPosition,
             upperFloorBlend);
 
-        desiredPosition =
-            target +
-            orbitDirection * horizontalDistance +
-            Vector3.up * cameraHeight;
+        Vector3 lookTarget = Vector3.Lerp(
+            firstFloorTarget,
+            upperTarget,
+            upperFloorBlend);
 
         desiredRotation = Quaternion.LookRotation(
-            target - desiredPosition,
+            lookTarget - desiredPosition,
             Vector3.up);
 
         desiredSize = Mathf.Lerp(
@@ -474,10 +536,6 @@ public class ROportCameraController : MonoBehaviour
             upperFloorSize,
             upperFloorBlend);
     }
-
-    // ==================================================
-    // MOVIMENTACAO DA CAMERA
-    // ==================================================
 
     private void UpdateCamera(bool instant)
     {
@@ -508,7 +566,6 @@ public class ROportCameraController : MonoBehaviour
         Transform cameraTransform =
             mainCamera.transform;
 
-        // Troca instantanea quando necessario.
         if (instant)
         {
             cameraTransform.SetPositionAndRotation(
@@ -519,18 +576,15 @@ public class ROportCameraController : MonoBehaviour
 
             positionVelocity = Vector3.zero;
             zoomVelocity = 0f;
-
             return;
         }
 
-        // Suaviza o acompanhamento do player.
         cameraTransform.position = Vector3.SmoothDamp(
             cameraTransform.position,
             desiredPosition,
             ref positionVelocity,
             positionSmoothTime);
 
-        // Suaviza o giro durante as curvas.
         float rotationFactor =
             1f - Mathf.Exp(
                 -rotationSpeed * Time.deltaTime);
