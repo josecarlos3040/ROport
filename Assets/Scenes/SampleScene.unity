@@ -7820,8 +7820,9 @@ MonoBehaviour:
   cityCenter: {fileID: 490910112}
   routeDrawer: {fileID: 129052041}
   runManager: {fileID: 233408707}
-  routeFollower: {fileID: 0}
-  trickController: {fileID: 0}
+  robotAnimation: {fileID: 1986707018}
+  routeFollower: {fileID: 1986707014}
+  trickController: {fileID: 1986707017}
   problemVisualLayers:
     serializedVersion: 2
     m_Bits: 256
@@ -13417,8 +13418,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::RouteFollower
   character: {fileID: 1986707013}
-  movementSpeed: 8
-  turnSpeed: 14
+  movementSpeed: 13
+  turnSpeed: 18
   waypointTolerance: 0.08
   obstacleMask:
     serializedVersion: 2
@@ -13498,7 +13499,7 @@ MonoBehaviour:
   spriteBillboard: {fileID: 2127648362}
   runManager: {fileID: 233408707}
   scoreManager: {fileID: 1532269787}
-  robotAnimation: {fileID: 0}
+  robotAnimation: {fileID: 1986707018}
   zones:
   - {fileID: 2112559633}
   - {fileID: 145022049}
@@ -13534,7 +13535,7 @@ MonoBehaviour:
   routeFollower: {fileID: 1986707014}
   runManager: {fileID: 233408707}
   cityProgressManager: {fileID: 1692907037}
-  robotAnimation: {fileID: 0}
+  fallDuration: 1
   photoDuration: 0.6
   impactDuration: 0.6
 --- !u!1 &2021705828
@@ -13857,7 +13858,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: -0.68, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_LocalScale: {x: 2, y: 2, z: 2}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 1334967187}
@@ -13968,7 +13969,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2127648359}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: c2d42be7da4ac4445b81385d0631be27, type: 3}
   m_Name: 
