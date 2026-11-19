@@ -14,6 +14,7 @@ public class TrickController : MonoBehaviour
     [SerializeField] private SpriteBillboard spriteBillboard;
     [SerializeField] private ROportRunManager runManager;
     [SerializeField] private TrickScoreManager scoreManager;
+    [SerializeField] private RobotAnimationController robotAnimation;
 
     [Header("Trick Zones")]
     [SerializeField] private TrickZone[] zones;
@@ -105,6 +106,9 @@ public class TrickController : MonoBehaviour
             visualStartRotation = playerVisual.localRotation;
             visualStartScale = playerVisual.localScale;
         }
+
+        if (robotAnimation == null)
+            robotAnimation = GetComponent<RobotAnimationController>();
     }
 
     private void Start()
@@ -429,6 +433,11 @@ public class TrickController : MonoBehaviour
             }
         }
 
+        if (activeSuccessful && robotAnimation != null)
+        {
+            robotAnimation.BeginTrick(zone.Animation);
+        }
+
         // Entrou na escada sem acertar a manobra.
         if (!activeSuccessful && zone.AffectsTravelSpeed)
         {
@@ -507,6 +516,9 @@ public class TrickController : MonoBehaviour
         if (activeZone == null)
             return;
 
+        if (robotAnimation != null)
+            robotAnimation.EndTrick();
+
         activeZone = null;
         activeSuccessful = false;
         activeTravelDirection = Vector3.zero;
@@ -562,6 +574,11 @@ public class TrickController : MonoBehaviour
     {
         StopFallAnimation();
 
+        // Nova animacao de impacto do artista.
+        if (robotAnimation != null)
+            robotAnimation.PlayImpact();
+
+        // Mantem o movimento de tropeço existente.
         if (playerVisual != null)
             fallCoroutine = StartCoroutine(AnimateFall());
     }
