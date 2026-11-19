@@ -7820,6 +7820,8 @@ MonoBehaviour:
   cityCenter: {fileID: 490910112}
   routeDrawer: {fileID: 129052041}
   runManager: {fileID: 233408707}
+  routeFollower: {fileID: 0}
+  trickController: {fileID: 0}
   problemVisualLayers:
     serializedVersion: 2
     m_Bits: 256
@@ -13415,8 +13417,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::RouteFollower
   character: {fileID: 1986707013}
-  movementSpeed: 12
-  turnSpeed: 18
+  movementSpeed: 8
+  turnSpeed: 14
   waypointTolerance: 0.08
   obstacleMask:
     serializedVersion: 2
@@ -13511,7 +13513,7 @@ MonoBehaviour:
   jumpHeight: 2
   grindVisualOffset: {x: 0, y: 0.25, z: 0}
   grindTiltAngle: 8
-  fallAnimationDuration: 1
+  fallAnimationDuration: 2
   fallTiltAngle: 75
   hintText: {fileID: 27108988}
   feedbackText: {fileID: 72350038}

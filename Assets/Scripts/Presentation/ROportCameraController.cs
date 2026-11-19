@@ -19,6 +19,12 @@ public class ROportCameraController : MonoBehaviour
     [SerializeField] private RouteDrawer routeDrawer;
     [SerializeField] private ROportRunManager runManager;
 
+    [Header("Camera Stabilization")]
+    [SerializeField] private RouteFollower routeFollower;
+    [SerializeField] private TrickController trickController;
+
+    private Vector3 lastValidForward = Vector3.forward;
+
     [Header("Visibility")]
     [SerializeField] private LayerMask problemVisualLayers;
     [SerializeField] private GameObject playerSpriteVisual;
@@ -117,6 +123,21 @@ public class ROportCameraController : MonoBehaviour
 
         if (mapMarker != null)
             originalMarkerActive = mapMarker.activeSelf;
+
+        if (player != null)
+        {
+            if (routeFollower == null)
+                routeFollower = player.GetComponent<RouteFollower>();
+
+            if (trickController == null)
+                trickController = player.GetComponent<TrickController>();
+
+            Vector3 initialForward = player.forward;
+            initialForward.y = 0f;
+
+            if (initialForward.sqrMagnitude > 0.0001f)
+                lastValidForward = initialForward.normalized;
+        }
     }
 
     private void OnEnable()
@@ -163,7 +184,11 @@ public class ROportCameraController : MonoBehaviour
 
         if (isDrawing)
             return;
-
+        if (trickController != null &&
+    trickController.IsPlayingFallAnimation)
+        {
+            return;
+        }
         UpdateCamera(false);
     }
 
@@ -237,16 +262,26 @@ public class ROportCameraController : MonoBehaviour
 
     private Vector3 GetPlayerForward()
     {
-        if (player == null)
-            return Vector3.forward;
+        if (routeFollower != null &&
+            routeFollower.IsFollowing &&
+            !routeFollower.IsBlocked)
+        {
+            // Usa a direcao real da rota,
+            // em vez da rotacao visual do Player.
+            Vector3 direction =
+                routeFollower.CurrentMoveDirection;
 
-        Vector3 forward = player.forward;
-        forward.y = 0f;
+            direction.y = 0f;
 
-        if (forward.sqrMagnitude < 0.001f)
-            return Vector3.forward;
+            if (direction.sqrMagnitude > 0.0001f)
+            {
+                lastValidForward = direction.normalized;
+            }
+        }
 
-        return forward.normalized;
+        // Quando o jogador para ou cai,
+        // conserva a ultima direcao valida.
+        return lastValidForward;
     }
 
     // NOVO: verifica em qual andar o jogador esta.

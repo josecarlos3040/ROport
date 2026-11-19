@@ -84,6 +84,7 @@ public class TrickController : MonoBehaviour
     private Vector3 visualStartScale;
 
     private Coroutine fallCoroutine;
+    public bool IsPlayingFallAnimation => fallCoroutine != null;
     private float feedbackTimer;
 
     private void Awake()
