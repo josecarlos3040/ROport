@@ -60,6 +60,10 @@ public class CityProgressManager : MonoBehaviour
         runManager.CheckpointReached -= CommitPendingPhotos;
         runManager.StageFailed -= DiscardPendingPhotos;
     }
+    public void ConfirmCheckpointDelivery()
+    {
+        CommitPendingPhotos();
+    }
 
     private void ValidateIds()
     {
