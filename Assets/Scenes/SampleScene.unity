@@ -3626,6 +3626,7 @@ MonoBehaviour:
   routeLine: {fileID: 1801470856}
   roadNetwork: {fileID: 163085304}
   phoneMapInput: {fileID: 1558570832}
+  runManager: {fileID: 0}
   roadMask:
     serializedVersion: 2
     m_Bits: 64
@@ -3636,6 +3637,18 @@ MonoBehaviour:
   lineHeight: 0.15
   easyStartOnPhone: 1
   playerPivotHeight: 1
+  checkpoints:
+  - {fileID: 1514229976}
+  - {fileID: 1670639891}
+  - {fileID: 22330017}
+  - {fileID: 1194645210}
+  - {fileID: 1581449760}
+  initialCheckpointIndex: 0
+  checkpointSnapRadius: 10
+  checkpointNodeSearchRadius: 5
+  maxAutoCompleteNodes: 8
+  maxFinalConnection: 3
+  checkpointVerticalTolerance: 3
 --- !u!114 &129052042
 MonoBehaviour:
   m_ObjectHideFlags: 0

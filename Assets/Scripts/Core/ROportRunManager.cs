@@ -24,10 +24,17 @@ public class ROportRunManager : MonoBehaviour
     [SerializeField]
     private bool requireCheckpointToStart = true;
 
-    private readonly PlanningState planning = new PlanningState();
-    private readonly ExecutingState executing = new ExecutingState();
-    private readonly FinishedState finished = new FinishedState();
-    private readonly DeadState dead = new DeadState();
+    private readonly PlanningState planning =
+        new PlanningState();
+
+    private readonly ExecutingState executing =
+        new ExecutingState();
+
+    private readonly FinishedState finished =
+        new FinishedState();
+
+    private readonly DeadState dead =
+        new DeadState();
 
     private IRunState currentState;
 
@@ -38,7 +45,7 @@ public class ROportRunManager : MonoBehaviour
 
     public event Action<RunPhase> PhaseChanged;
 
-    // Somente um checkpoint concluido aplica melhorias.
+    // Entrega concluida com sucesso.
     public event Action CheckpointReached;
 
     // Morte ou abandono da tentativa atual.
@@ -85,6 +92,7 @@ public class ROportRunManager : MonoBehaviour
         if (keyboard == null)
             return;
 
+        // R reinicia apenas a tentativa atual.
         if (Phase != RunPhase.Finished &&
             keyboard.rKey.wasPressedThisFrame)
         {
@@ -110,14 +118,17 @@ public class ROportRunManager : MonoBehaviour
         }
     }
 
-    // Agora reiniciar significa redesenhar do lugar atual.
+    // ==========================================
+    // RESET
+    // ==========================================
+
     public void ResetRun()
     {
         if (Phase == RunPhase.Finished)
             return;
 
-        // Abandonar uma tentativa em execucao
-        // descarta as fotografias ainda nao confirmadas.
+        // Descarta fotografias pendentes somente
+        // ao abandonar uma tentativa em execucao.
         if (Phase == RunPhase.Executing)
             StageFailed?.Invoke();
 
@@ -126,13 +137,17 @@ public class ROportRunManager : MonoBehaviour
 
     private void BeginPlanningFromCurrentPosition()
     {
-        // Diferente de ResetFollower(), nao volta ao spawn.
+        // Nao teleporta o Player ao spawn.
         routeFollower.StopAtCurrentPosition();
 
         routeDrawer.ClearRoute();
 
         ChangeState(planning);
     }
+
+    // ==========================================
+    // START ROUTE
+    // ==========================================
 
     public void TryStartRoute()
     {
@@ -141,56 +156,88 @@ public class ROportRunManager : MonoBehaviour
 
         if (!routeDrawer.HasRoute)
         {
-            ShowStatus("Desenhe uma rota primeiro.");
+            ShowStatus(
+                "Desenhe uma rota primeiro.");
             return;
         }
 
-        // So exige o checkpoint se a opcao
-        // estiver ativada no Inspector.
         if (requireCheckpointToStart)
         {
-            var points = routeDrawer.Points;
-            Vector3 routeEnd = points[points.Count - 1];
+            // NOVO:
+            // Tenta completar automaticamente
+            // a rota ate o checkpoint atual.
+            bool connected =
+                routeDrawer
+                    .TryCompleteToCurrentCheckpoint();
 
-            if (!checkpointManager.RouteEndsAtCheckpoint(routeEnd))
+            if (!connected)
             {
-                ShowStatus(
-                    "A rota precisa terminar no destino amarelo!");
+                // RouteDrawer informa o motivo
+                // usando o evento Feedback.
                 return;
             }
+
+            // Verificacao final usando o
+            // CityCheckpointManager existente.
+            var points = routeDrawer.Points;
+
+            Vector3 routeEnd =
+                points[points.Count - 1];
+
+            if (!checkpointManager
+                .RouteEndsAtCheckpoint(routeEnd))
+            {
+                ShowStatus(
+                    "O final da rota ainda esta " +
+                    "fora da area do checkpoint.");
+
+                return;
+            }
+
+            Debug.Log(
+                "[ROport] Rota conectada ao " +
+                "checkpoint. Iniciando execucao!");
         }
 
         ChangeState(executing);
     }
+
+    // ==========================================
+    // ROUTE EVENTS
+    // ==========================================
 
     private void OnRouteCompleted()
     {
         if (Phase != RunPhase.Executing)
             return;
 
-        // Chegou fisicamente ao checkpoint.
-        if (checkpointManager.IsAtCurrentCheckpoint(player.position))
+        // Confirma que o Player chegou
+        // fisicamente ao checkpoint.
+        if (checkpointManager
+            .IsAtCurrentCheckpoint(player.position))
         {
+            // Confirma fotografias, NPCs e VFX.
             CheckpointReached?.Invoke();
 
+            // Passa para o proximo checkpoint.
             checkpointManager.AdvanceCheckpoint();
 
             if (checkpointManager.IsComplete)
             {
+                // Todos os cinco concluidos.
                 ChangeState(finished);
             }
             else
             {
+                // Continua a partida do lugar atual.
                 BeginPlanningFromCurrentPosition();
             }
 
             return;
         }
 
-        // A rota foi interrompida antes do destino,
-        // por exemplo apos fotografar um bloqueio.
-        // Mantem o progresso fotografado pendente
-        // e permite planejar outro caminho.
+        // Terminou a rota sem chegar ao checkpoint.
+        // Permite desenhar uma nova.
         BeginPlanningFromCurrentPosition();
     }
 
@@ -204,6 +251,10 @@ public class ROportRunManager : MonoBehaviour
         ChangeState(dead);
     }
 
+    // ==========================================
+    // FEEDBACK
+    // ==========================================
+
     private void OnRouteChanged(int pointCount)
     {
         if (Phase != RunPhase.Planning)
@@ -212,12 +263,14 @@ public class ROportRunManager : MonoBehaviour
         if (pointCount >= 2)
         {
             ShowStatus(
-                "Leve a rota ate o destino. ESPACO: executar");
+                "Aproxime a rota do checkpoint.\n" +
+                "ESPACO: completar e executar.");
         }
         else
         {
             ShowStatus(
-                "Desenhe do personagem ate o destino.");
+                "Desenhe uma rota ate perto " +
+                "do checkpoint.");
         }
     }
 
@@ -225,14 +278,6 @@ public class ROportRunManager : MonoBehaviour
     {
         if (Phase == RunPhase.Planning)
             ShowStatus(message);
-    }
-
-    private void ChangeState(IRunState nextState)
-    {
-        currentState = nextState;
-        currentState.Enter(this);
-
-        PhaseChanged?.Invoke(currentState.Phase);
     }
 
     private void ShowStatus(string message)
@@ -243,7 +288,18 @@ public class ROportRunManager : MonoBehaviour
             Debug.Log("[ROport] " + message);
     }
 
-    // State Pattern
+    // ==========================================
+    // STATE MANAGEMENT
+    // ==========================================
+
+    private void ChangeState(IRunState nextState)
+    {
+        currentState = nextState;
+        currentState.Enter(this);
+
+        PhaseChanged?.Invoke(currentState.Phase);
+    }
+
     private interface IRunState
     {
         RunPhase Phase { get; }
@@ -255,6 +311,10 @@ public class ROportRunManager : MonoBehaviour
             Keyboard keyboard);
     }
 
+    // ==========================================
+    // PLANNING
+    // ==========================================
+
     private sealed class PlanningState : IRunState
     {
         public RunPhase Phase => RunPhase.Planning;
@@ -264,7 +324,8 @@ public class ROportRunManager : MonoBehaviour
             manager.routeDrawer.SetEditable(true);
 
             manager.ShowStatus(
-                "Desenhe uma rota ate o destino atual.");
+                "Desenhe ate perto do checkpoint.\n" +
+                "ESPACO: completar e executar.");
         }
 
         public void HandleInput(
@@ -275,6 +336,10 @@ public class ROportRunManager : MonoBehaviour
                 manager.TryStartRoute();
         }
     }
+
+    // ==========================================
+    // EXECUTING
+    // ==========================================
 
     private sealed class ExecutingState : IRunState
     {
@@ -287,14 +352,20 @@ public class ROportRunManager : MonoBehaviour
             manager.routeFollower.Follow(
                 manager.routeDrawer.Points);
 
-            manager.ShowStatus("Executando rota...");
+            manager.ShowStatus(
+                "Executando rota...");
         }
 
         public void HandleInput(
             ROportRunManager manager,
             Keyboard keyboard)
-        { }
+        {
+        }
     }
+
+    // ==========================================
+    // DEAD
+    // ==========================================
 
     private sealed class DeadState : IRunState
     {
@@ -312,8 +383,13 @@ public class ROportRunManager : MonoBehaviour
         public void HandleInput(
             ROportRunManager manager,
             Keyboard keyboard)
-        { }
+        {
+        }
     }
+
+    // ==========================================
+    // FINISHED
+    // ==========================================
 
     private sealed class FinishedState : IRunState
     {
@@ -331,6 +407,7 @@ public class ROportRunManager : MonoBehaviour
         public void HandleInput(
             ROportRunManager manager,
             Keyboard keyboard)
-        { }
+        {
+        }
     }
 }
