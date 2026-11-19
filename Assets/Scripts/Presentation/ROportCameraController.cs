@@ -19,6 +19,10 @@ public class ROportCameraController : MonoBehaviour
     [SerializeField] private RouteDrawer routeDrawer;
     [SerializeField] private ROportRunManager runManager;
 
+    [Header("Animation Camera Lock")]
+    [SerializeField]
+    private RobotAnimationController robotAnimation;
+
     [Header("Camera Stabilization")]
     [SerializeField] private RouteFollower routeFollower;
     [SerializeField] private TrickController trickController;
@@ -138,6 +142,11 @@ public class ROportCameraController : MonoBehaviour
             if (initialForward.sqrMagnitude > 0.0001f)
                 lastValidForward = initialForward.normalized;
         }
+        if (robotAnimation == null && player != null)
+        {
+            robotAnimation =
+                player.GetComponent<RobotAnimationController>();
+        }
     }
 
     private void OnEnable()
@@ -175,7 +184,7 @@ public class ROportCameraController : MonoBehaviour
 
     private void LateUpdate()
     {
-        // Preserva a camera durante o desenho.
+        // Mantem a logica atual do desenho.
         bool isDrawing =
             runManager != null &&
             runManager.Phase == RunPhase.Planning &&
@@ -184,11 +193,19 @@ public class ROportCameraController : MonoBehaviour
 
         if (isDrawing)
             return;
-        if (trickController != null &&
-    trickController.IsPlayingFallAnimation)
+
+        // Congela o enquadramento durante
+        // impacto ou morte do personagem.
+        if (robotAnimation != null &&
+            robotAnimation.IsFallAnimationActive)
         {
+            positionVelocity = Vector3.zero;
+            zoomVelocity = 0f;
+
             return;
         }
+
+        // Acompanhamento normal da camera.
         UpdateCamera(false);
     }
 
