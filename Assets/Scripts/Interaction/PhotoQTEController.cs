@@ -1,8 +1,8 @@
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
-using UnityEngine.InputSystem;
 using UnityEngine.UI;
+using UnityEngine.InputSystem;
 
 public class PhotoQTEController : MonoBehaviour
 {
@@ -24,27 +24,47 @@ public class PhotoQTEController : MonoBehaviour
     [SerializeField] private Image timeBar;
     [SerializeField] private Slider timeSlider;
     [SerializeField] private TMP_Text feedbackText;
+    [SerializeField] private TMP_Text hudPhotoHint;
+
+    [Header("Detection")]
+    [SerializeField, Min(0f)]
+    private float extraHorizontalRadius = 2f;
+
+    [SerializeField, Min(0f)]
+    private float maxVerticalDifference = 3f;
+
+    [SerializeField, Min(0f)]
+    private float playerPivotHeight = 1f;
 
     [Header("Feedback")]
-    [SerializeField, Min(0.1f)] private float feedbackDuration = 2f;
-
-    private readonly HashSet<CityProblem> failedThisRun =
-        new HashSet<CityProblem>();
+    [SerializeField, Min(0.1f)]
+    private float feedbackDuration = 2f;
 
     private CityProblem currentProblem;
     private float initialDistance;
     private float feedbackRemaining;
+
+    private readonly HashSet<CityProblem> failedThisRun =
+        new HashSet<CityProblem>();
 
     private void Awake()
     {
         if (gameplayCamera == null)
             gameplayCamera = Camera.main;
 
+        if (qtePanel == gameObject)
+        {
+            Debug.LogError(
+                "[ROport Photo] O controlador nao pode " +
+                "estar no proprio QTE Panel!", this);
+            return;
+        }
+
         HideQTE();
         SetBarProgress(1f);
 
         if (feedbackText != null)
-            feedbackText.text = string.Empty;
+            feedbackText.text = "";
     }
 
     private void OnEnable()
@@ -65,17 +85,36 @@ public class PhotoQTEController : MonoBehaviour
     {
         UpdateFeedback();
 
-        if (!HasValidReferences() ||
-            runManager.Phase != RunPhase.Executing)
+        if (player == null ||
+            routeFollower == null ||
+            runManager == null ||
+            cityProgressManager == null)
         {
             HideQTE();
             return;
         }
 
-        if (currentProblem != null && !IsCurrentProblemAvailable())
+        if (runManager.Phase != RunPhase.Executing)
         {
-            FailQTE();
+            HideQTE();
             return;
+        }
+
+        Keyboard keyboard = Keyboard.current;
+        bool pressedE =
+            keyboard != null &&
+            keyboard.eKey.wasPressedThisFrame;
+
+        if (currentProblem != null)
+        {
+            if (!currentProblem.CanPhotograph)
+            {
+                HideQTE();
+            }
+            else if (!IsWithinPhotoRange(currentProblem))
+            {
+                FailQTE();
+            }
         }
 
         if (currentProblem == null)
@@ -87,48 +126,69 @@ public class PhotoQTEController : MonoBehaviour
         }
 
         if (currentProblem == null)
-            return;
-
-        UpdateQTEWorldPosition();
-
-        // Permite fotografar enquanto a janela esta ativa.
-        Keyboard keyboard = Keyboard.current;
-
-        if (keyboard != null &&
-            keyboard.eKey.wasPressedThisFrame)
         {
-            TryTakePhoto();
+            if (pressedE)
+            {
+                Debug.LogWarning(
+                    "[ROport Photo] E pressionado, " +
+                    "mas nenhum problema fotografavel " +
+                    "foi encontrado. Confira o alcance, " +
+                    "o estado e as referencias.");
+            }
+
             return;
         }
 
-        UpdateQTEProgress();
+        UpdateQTEWorldPosition();
+        UpdatePhotoBar();
+
+        if (pressedE)
+            TryTakePhoto();
     }
 
-    private bool HasValidReferences()
+    private bool IsWithinPhotoRange(CityProblem problem)
     {
-        return player != null &&
-               routeFollower != null &&
-               runManager != null &&
-               cityProgressManager != null;
-    }
+        if (problem == null || player == null)
+            return false;
 
-    private bool IsCurrentProblemAvailable()
-    {
-        return currentProblem.CanPhotograph &&
-               currentProblem.IsPlayerNear(player.position);
+        if (problem.IsPlayerNear(player.position))
+            return true;
+
+        Vector3 feet =
+            player.position -
+            Vector3.up * playerPivotHeight;
+
+        Vector3 center = problem.transform.position;
+
+        if (Mathf.Abs(feet.y - center.y) >
+            maxVerticalDifference)
+            return false;
+
+        float dx = feet.x - center.x;
+        float dz = feet.z - center.z;
+
+        float radius =
+            problem.InteractionRadius +
+            extraHorizontalRadius;
+
+        return dx * dx + dz * dz <= radius * radius;
     }
 
     private CityProblem FindNearbyProblem()
     {
+        if (cityProgressManager.Problems == null)
+            return null;
+
         CityProblem nearest = null;
         float bestDistance = float.MaxValue;
 
-        foreach (CityProblem problem in cityProgressManager.Problems)
+        foreach (CityProblem problem in
+                 cityProgressManager.Problems)
         {
             if (problem == null ||
                 !problem.CanPhotograph ||
                 failedThisRun.Contains(problem) ||
-                !problem.IsPlayerNear(player.position))
+                !IsWithinPhotoRange(problem))
             {
                 continue;
             }
@@ -140,11 +200,11 @@ public class PhotoQTEController : MonoBehaviour
 
             float distance = difference.sqrMagnitude;
 
-            if (distance >= bestDistance)
-                continue;
-
-            bestDistance = distance;
-            nearest = problem;
+            if (distance < bestDistance)
+            {
+                bestDistance = distance;
+                nearest = problem;
+            }
         }
 
         return nearest;
@@ -152,19 +212,17 @@ public class PhotoQTEController : MonoBehaviour
 
     private void StartQTE(CityProblem problem)
     {
-        float distance =
-            routeFollower.GetRemainingDistanceInsideProblem(problem);
-
-        // Se estiver bloqueado, a janela de espera
-        // ainda permite fotografar.
-        if (distance <= 0.001f && !routeFollower.IsBlocked)
-        {
-            failedThisRun.Add(problem);
+        if (problem == null)
             return;
-        }
 
         currentProblem = problem;
-        initialDistance = Mathf.Max(distance, 0.001f);
+
+        initialDistance = Mathf.Max(
+            0.001f,
+            routeFollower.GetRemainingDistanceInsideProblem(
+                problem));
+
+        SetBarProgress(1f);
 
         if (qtePanel != null)
             qtePanel.SetActive(true);
@@ -177,34 +235,35 @@ public class PhotoQTEController : MonoBehaviour
                 "\n[E]";
         }
 
-        SetBarProgress(1f);
+        if (hudPhotoHint != null)
+        {
+            hudPhotoHint.gameObject.SetActive(true);
+            hudPhotoHint.text =
+                "[E] FOTOGRAFAR\n" +
+                problem.DisplayName;
+        }
+
         UpdateQTEWorldPosition();
+
+        Debug.Log(
+            "[ROport Photo] QTE iniciado: " +
+            problem.DisplayName);
     }
 
-    private void UpdateQTEProgress()
+    private void UpdatePhotoBar()
     {
-        float progress;
+        if (currentProblem == null)
+            return;
 
-        if (routeFollower.IsBlocked)
-        {
-            // Ultima oportunidade antes do fim da run.
-            progress = routeFollower.BlockTimeRemaining /
-                       Mathf.Max(routeFollower.BlockWaitDuration, 0.01f);
-        }
-        else
-        {
-            float remainingDistance =
-                routeFollower.GetRemainingDistanceInsideProblem(
-                    currentProblem);
+        float remainingDistance =
+            routeFollower.GetRemainingDistanceInsideProblem(
+                currentProblem);
 
-            if (remainingDistance <= 0.001f)
-            {
-                FailQTE();
-                return;
-            }
-
-            progress = remainingDistance / initialDistance;
-        }
+        // O calculo da rota nao pode cancelar a foto.
+        float progress = remainingDistance > 0.001f
+            ? Mathf.Clamp01(
+                remainingDistance / initialDistance)
+            : 1f;
 
         SetBarProgress(progress);
     }
@@ -229,18 +288,18 @@ public class PhotoQTEController : MonoBehaviour
         if (currentProblem == null ||
             worldQTECanvas == null ||
             gameplayCamera == null)
-        {
             return;
-        }
 
-        Transform canvasTransform = worldQTECanvas.transform;
+        Transform canvasTransform =
+            worldQTECanvas.transform;
 
         canvasTransform.position =
             currentProblem.transform.position +
             Vector3.up * worldHeight +
             gameplayCamera.transform.up * screenUpOffset;
 
-        canvasTransform.rotation = gameplayCamera.transform.rotation;
+        canvasTransform.rotation =
+            gameplayCamera.transform.rotation;
     }
 
     private void TryTakePhoto()
@@ -248,14 +307,27 @@ public class PhotoQTEController : MonoBehaviour
         if (currentProblem == null)
             return;
 
-        if (!cityProgressManager.RegisterPhoto(currentProblem))
-            return;
+        if (cityProgressManager.RegisterPhoto(currentProblem))
+        {
+            ShowFeedback(
+                "FOTO REGISTRADA!\n" +
+                currentProblem.DisplayName);
 
-        ShowFeedback(
-            "FOTO REGISTRADA!\n" +
-            currentProblem.DisplayName);
+            Debug.Log(
+                "[ROport Photo] Foto registrada: " +
+                currentProblem.DisplayName);
 
-        HideQTE();
+            // O CityProgressManager dispara PhotoRecorded
+            // para a animacao ROPhoto.
+            HideQTE();
+        }
+        else
+        {
+            Debug.LogWarning(
+                "[ROport Photo] RegisterPhoto recusou " +
+                "a fotografia de " +
+                currentProblem.DisplayName);
+        }
     }
 
     private void FailQTE()
@@ -278,6 +350,12 @@ public class PhotoQTEController : MonoBehaviour
 
         if (qtePanel != null)
             qtePanel.SetActive(false);
+
+        if (hudPhotoHint != null)
+        {
+            hudPhotoHint.text = "";
+            hudPhotoHint.gameObject.SetActive(false);
+        }
     }
 
     private void ShowFeedback(string message)
@@ -295,8 +373,11 @@ public class PhotoQTEController : MonoBehaviour
 
         feedbackRemaining -= Time.deltaTime;
 
-        if (feedbackRemaining <= 0f && feedbackText != null)
-            feedbackText.text = string.Empty;
+        if (feedbackRemaining <= 0f &&
+            feedbackText != null)
+        {
+            feedbackText.text = "";
+        }
     }
 
     private void OnPhaseChanged(RunPhase phase)
@@ -304,12 +385,6 @@ public class PhotoQTEController : MonoBehaviour
         HideQTE();
 
         if (phase == RunPhase.Planning)
-        {
             failedThisRun.Clear();
-            feedbackRemaining = 0f;
-
-            if (feedbackText != null)
-                feedbackText.text = string.Empty;
-        }
     }
 }

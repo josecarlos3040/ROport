@@ -76,6 +76,9 @@ public class TrickController : MonoBehaviour
     private readonly HashSet<TrickZone> traversedZones =
         new HashSet<TrickZone>();
 
+    private readonly HashSet<TrickZone> consumedCityTricks =
+    new HashSet<TrickZone>();
+
     private readonly Dictionary<TrickZone, int> preparedPoints =
         new Dictionary<TrickZone, int>();
 
@@ -220,6 +223,18 @@ public class TrickController : MonoBehaviour
                !routeFollower.IsBlocked;
     }
 
+    private bool IsCityTrick(TrickZone zone)
+    {
+        return zone != null &&
+            zone.GetComponentInParent<CityProblem>() != null;
+    }
+
+    private bool IsCityTrickConsumed(TrickZone zone)
+    {
+        return IsCityTrick(zone) &&
+            consumedCityTricks.Contains(zone);
+    }
+
     private Vector3 GetFeetPosition()
     {
         return character.position -
@@ -239,15 +254,14 @@ public class TrickController : MonoBehaviour
         foreach (TrickZone zone in zones)
         {
             if (zone == null ||
+                !zone.isActiveAndEnabled ||
                 attemptedZones.Contains(zone) ||
-                traversedZones.Contains(zone))
+                traversedZones.Contains(zone) ||
+                IsCityTrickConsumed(zone))
             {
                 continue;
             }
 
-            // Aceita tanto a posicao calculada dos pes
-            // quanto o pivot do personagem.
-            // Isso evita erros de altura nas zonas.
             bool feetInside = zone.IsInApproach(feet);
             bool pivotInside =
                 zone.IsInApproach(character.position);
@@ -255,25 +269,20 @@ public class TrickController : MonoBehaviour
             if (!feetInside && !pivotInside)
                 continue;
 
-            // Nao permite preparar depois que entrou
-            // na zona de execucao.
-            if (zone.IsInTraversal(feet))
+            // Nao oferece a manobra se ja estiver
+            // atravessando a zona principal.
+            if (zone.IsInTraversal(feet) ||
+                zone.IsInTraversal(character.position))
+            {
                 continue;
+            }
 
-            // A rota precisa passar pela zona da manobra.
-            // Testamos as duas referencias de altura
-            // para evitar falsos negativos.
-            bool routeWillTraverse =
-                routeFollower.WillTraverseTrickZone(
-                    zone, playerPivotHeight, 80f) ||
-                routeFollower.WillTraverseTrickZone(
-                    zone, 0f, 80f);
-
-            if (!routeWillTraverse)
-                continue;
-
+            // A area de aproximacao agora e suficiente
+            // para apresentar a oportunidade.
+            // Nao depende mais de WillTraverseTrickZone.
             float distance =
-                (zone.transform.position - feet).sqrMagnitude;
+                (zone.transform.position - feet)
+                .sqrMagnitude;
 
             if (distance < bestDistance)
             {
@@ -285,18 +294,28 @@ public class TrickController : MonoBehaviour
         return nearest;
     }
 
+
     private void PrepareTrick(TrickZone zone, Vector3 feet)
     {
-        attemptedZones.Add(zone);
+        if (zone == null)
+            return;
 
         bool success = zone.EvaluateApproachTiming(
             feet,
             out int points,
             out string rating);
 
+        Debug.Log(
+            "[ROport Trick] F apertado em " +
+            zone.TrickName +
+            " | Sucesso: " + success +
+            " | Pontos: " + points +
+            " | Rating: " + rating);
+
+        attemptedZones.Add(zone);
+
         if (success)
         {
-            // Guarda o acerto ate chegar na manobra.
             preparedPoints[zone] = points;
 
             ShowFeedback(
@@ -304,11 +323,8 @@ public class TrickController : MonoBehaviour
         }
         else
         {
-            // Sem penalidade extra neste momento.
-            // Na rampa ele ira devagar.
-            // No entulho, a colisao causara o tropeço.
             ShowFeedback(
-                "ERROU O TIMING!\nSEM BONUS DE VELOCIDADE");
+                "ERROU O TIMING!\nSEM BONUS");
         }
 
         SetHint("");
@@ -318,25 +334,36 @@ public class TrickController : MonoBehaviour
         Vector3 feet,
         Vector3 direction)
     {
-        // Preserva a zona atual enquanto estiver nela.
         if (activeZone != null &&
-            activeZone.IsInTraversal(feet))
+            (activeZone.IsInTraversal(feet) ||
+             activeZone.IsInTraversal(character.position)))
         {
             return activeZone;
         }
 
-        if (zones == null)
+        if (zones == null || character == null)
             return null;
 
         foreach (TrickZone zone in zones)
         {
             if (zone == null ||
-                traversedZones.Contains(zone) ||
-                !zone.IsInTraversal(feet) ||
-                (zone.OnlyDescending && direction.y >= -0.02f))
+                !zone.isActiveAndEnabled ||
+                IsCityTrickConsumed(zone) ||
+                traversedZones.Contains(zone))
             {
                 continue;
             }
+
+            bool inside =
+                zone.IsInTraversal(feet) ||
+                zone.IsInTraversal(character.position);
+
+            if (!inside)
+                continue;
+
+            if (zone.OnlyDescending &&
+                direction.y >= -0.02f)
+                continue;
 
             return zone;
         }
@@ -423,8 +450,22 @@ public class TrickController : MonoBehaviour
 
         traversedZones.Add(zone);
 
+        if (IsCityTrick(zone))
+        {
+            consumedCityTricks.Add(zone);
+
+            Debug.Log(
+                "[ROport] Manobra urbana utilizada: " +
+                zone.TrickName);
+        }
+
         activeSuccessful =
             preparedPoints.TryGetValue(zone, out int points);
+
+        Debug.Log(
+    "[ROport Trick] Entrou na travessia: " +
+    zone.TrickName +
+    " | Preparado: " + activeSuccessful);
 
         if (activeSuccessful)
         {
@@ -452,15 +493,33 @@ public class TrickController : MonoBehaviour
             trickVFX.PlaySuccess();
         }
 
-        // Entrou na escada sem acertar a manobra.
         if (!activeSuccessful && zone.AffectsTravelSpeed)
         {
             ShowFeedback(
                 "ERROU A MANOBRA!\nVELOCIDADE REDUZIDA");
 
-            // Reutiliza a animacao de tropeço.
-            StartFallAnimation();
+            // Problemas urbanos Trick nao executam
+            // animacao de queda.
+            bool isCityObstacle =
+                zone.GetComponentInParent<CityProblem>() != null;
+
+            if (!isCityObstacle)
+            {
+                // Mantem a queda das rampas/escadas.
+                StartFallAnimation();
+            }
+            else
+            {
+                // Apenas efeito de erro no obstaculo.
+                if (trickVFX != null)
+                    trickVFX.PlayFailure();
+            }
         }
+    }
+
+    public void ResetCityTricksForNewGame()
+    {
+        consumedCityTricks.Clear();
     }
 
     private void UpdateTrickVisual()
@@ -548,9 +607,86 @@ public class TrickController : MonoBehaviour
     private void OnTrickObstacleHit(CityProblem problem)
     {
         if (runManager == null ||
-            runManager.Phase != RunPhase.Executing)
+            runManager.Phase != RunPhase.Executing ||
+            problem == null)
         {
             return;
+        }
+
+        if (problem == null)
+            return;
+
+        // Verifica se existe um salto preparado
+        // especificamente para o problema atingido.
+        if (zones != null)
+        {
+            foreach (TrickZone zone in zones)
+            {
+                if (zone == null)
+                    continue;
+
+                if (zone.GetComponentInParent<CityProblem>()
+                    != problem)
+                    continue;
+
+                bool jumpTrick =
+                    zone.Animation == TrickAnimation.Jump ||
+                    zone.Animation == TrickAnimation.JumpAndSpin;
+
+                bool jumpPrepared =
+                    preparedPoints.ContainsKey(zone) ||
+                    (activeZone == zone && activeSuccessful);
+
+                if (jumpTrick && jumpPrepared)
+                {
+                    Debug.Log(
+                        "[ROport Trick] Salto preparado: " +
+                        "nao cancelar a manobra em " +
+                        problem.DisplayName);
+
+                    return;
+                }
+            }
+        }
+
+        // Verifica se o jogador esta executando
+        // um salto bem-sucedido sobre este problema.
+        if (activeSuccessful && activeZone != null)
+        {
+            TrickAnimation animation = activeZone.Animation;
+
+            bool isJump =
+                animation == TrickAnimation.Jump ||
+                animation == TrickAnimation.JumpAndSpin;
+
+            CityProblem zoneProblem =
+                activeZone.GetComponentInParent<CityProblem>();
+
+            // Nao cancela um salto correto sobre
+            // o problema correspondente.
+            if (isJump && zoneProblem == problem)
+            {
+                Debug.Log(
+                    "[ROport] Salto correto sobre " +
+                    problem.DisplayName);
+
+                return;
+            }
+        }
+
+        if (problem != null && zones != null)
+        {
+            foreach (TrickZone zone in zones)
+            {
+                if (zone == null)
+                    continue;
+
+                if (zone.GetComponentInParent<CityProblem>()
+                    == problem)
+                {
+                    consumedCityTricks.Add(zone);
+                }
+            }
         }
 
         TrickZone affectedZone = activeZone;
@@ -561,9 +697,15 @@ public class TrickController : MonoBehaviour
 
             foreach (TrickZone zone in zones)
             {
-                if (zone != null &&
-                    (zone.IsInTraversal(feet) ||
-                     zone.IsInApproach(feet)))
+                if (zone == null)
+                    continue;
+
+                if (zone.GetComponentInParent<CityProblem>()
+                    != problem)
+                    continue;
+
+                if (zone.IsInTraversal(feet) ||
+                    zone.IsInApproach(feet))
                 {
                     affectedZone = zone;
                     break;
@@ -571,20 +713,35 @@ public class TrickController : MonoBehaviour
             }
         }
 
+        // Invalida a manobra que falhou.
         if (affectedZone != null)
         {
             attemptedZones.Add(affectedZone);
             preparedPoints.Remove(affectedZone);
         }
 
-        // Se colidiu, a execucao da manobra falhou.
         activeSuccessful = false;
 
+        if (robotAnimation != null)
+            robotAnimation.EndTrick();
+
+        if (trickVFX != null)
+        {
+            trickVFX.StopSuccess();
+            trickVFX.PlayFailure();
+        }
+
+        RestoreVisual();
+
+        // A penalidade de velocidade fica
+        // sob responsabilidade do RouteFollower.
         ShowFeedback(
             "TROPECOU!\nVELOCIDADE REDUZIDA");
 
-        StartFallAnimation();
         SetHint("");
+
+        // Nao chama StartFallAnimation().
+        // Obstaculos Trick nao derrubam o robo.
     }
 
     private void StartFallAnimation()

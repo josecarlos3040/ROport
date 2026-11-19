@@ -5,14 +5,19 @@ using UnityEngine;
 public class TrickScoreManager : MonoBehaviour
 {
     [Header("References")]
-    [SerializeField] private ROportRunManager runManager;
-    [SerializeField] private CityProgressManager cityProgressManager;
+    [SerializeField]
+    private ROportRunManager runManager;
+
+    [SerializeField]
+    private CityProgressManager cityProgressManager;
 
     [Header("UI")]
-    [SerializeField] private TMP_Text scoreText;
+    [SerializeField]
+    private TMP_Text scoreText;
 
     [Header("Photo Points")]
-    [SerializeField, Min(0)] private int photoPoints = 50;
+    [SerializeField, Min(0)]
+    private int photoPoints = 50;
 
     public int CurrentScore { get; private set; }
 
@@ -25,25 +30,35 @@ public class TrickScoreManager : MonoBehaviour
 
     private void OnEnable()
     {
-        if (runManager != null)
-            runManager.PhaseChanged += OnPhaseChanged;
-
         if (cityProgressManager != null)
-            cityProgressManager.PhotoRecorded += OnPhotoRecorded;
+        {
+            cityProgressManager.PhotoRecorded +=
+                OnPhotoRecorded;
+        }
+
+        UpdateUI();
     }
 
     private void OnDisable()
     {
-        if (runManager != null)
-            runManager.PhaseChanged -= OnPhaseChanged;
-
         if (cityProgressManager != null)
-            cityProgressManager.PhotoRecorded -= OnPhotoRecorded;
+        {
+            cityProgressManager.PhotoRecorded -=
+                OnPhotoRecorded;
+        }
     }
 
     private void OnPhotoRecorded(CityProblem problem)
     {
+        if (problem == null)
+            return;
+
         AddPoints(photoPoints);
+
+        Debug.Log(
+            "[ROport] Foto de " +
+            problem.DisplayName +
+            ": +" + photoPoints + " pontos");
     }
 
     public bool RegisterTrick(int points)
@@ -56,31 +71,45 @@ public class TrickScoreManager : MonoBehaviour
         }
 
         AddPoints(points);
+
+        Debug.Log(
+            "[ROport] Manobra realizada: +" +
+            points + " pontos");
+
         return true;
     }
 
     private void AddPoints(int amount)
     {
+        if (amount <= 0)
+            return;
+
         CurrentScore += amount;
 
         UpdateUI();
         ScoreChanged?.Invoke(CurrentScore);
     }
 
-    private void OnPhaseChanged(RunPhase phase)
+    // Usar somente ao comecar uma nova partida
+    // completa, nunca entre checkpoints.
+    public void ResetScoreForNewGame()
     {
-        if (phase != RunPhase.Planning)
-            return;
-
         CurrentScore = 0;
 
         UpdateUI();
         ScoreChanged?.Invoke(CurrentScore);
+
+        Debug.Log(
+            "[ROport] Pontuacao reiniciada " +
+            "para uma nova partida.");
     }
 
     private void UpdateUI()
     {
         if (scoreText != null)
-            scoreText.text = $"PONTOS: {CurrentScore}";
+        {
+            scoreText.text =
+                "PONTOS: " + CurrentScore;
+        }
     }
 }
