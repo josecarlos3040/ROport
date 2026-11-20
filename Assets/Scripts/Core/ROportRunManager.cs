@@ -188,7 +188,7 @@ public class ROportRunManager : MonoBehaviour
             {
                 ShowStatus(
                     "O final da rota ainda esta " +
-                    "fora da area do checkpoint.");
+                    "fora da area de entrega.");
 
                 return;
             }
@@ -262,14 +262,14 @@ public class ROportRunManager : MonoBehaviour
         if (pointCount >= 2)
         {
             ShowStatus(
-                "Aproxime a rota do checkpoint.\n" +
-                "ESPACO: completar e executar.");
+                "Aproxime a rota do ponto de entrega.\n" +
+                "Aperte ESPACO para começar o trajeto.");
         }
         else
         {
             ShowStatus(
                 "Desenhe uma rota ate perto " +
-                "do checkpoint.");
+                "do ponto de entrega.");
         }
     }
 
@@ -323,8 +323,8 @@ public class ROportRunManager : MonoBehaviour
             manager.routeDrawer.SetEditable(true);
 
             manager.ShowStatus(
-                "Desenhe ate perto do checkpoint.\n" +
-                "ESPACO: completar e executar.");
+                "Desenhe ate perto do ponto de entrega.\n" +
+                "Aperte ESPACO para começar o trajeto.");
         }
 
         public void HandleInput(

@@ -752,7 +752,7 @@ GameObject:
   m_Component:
   - component: {fileID: 41548311}
   - component: {fileID: 41548312}
-  m_Layer: 0
+  m_Layer: 10
   m_Name: GameObject
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -1224,7 +1224,7 @@ GameObject:
   m_Component:
   - component: {fileID: 114346395}
   - component: {fileID: 114346396}
-  m_Layer: 0
+  m_Layer: 10
   m_Name: GameObject
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -6904,13 +6904,17 @@ PrefabInstance:
       propertyPath: deliveryVFXPrefab
       value: 
       objectReference: {fileID: 416767981}
+    - target: {fileID: 4156285378518616906, guid: e44b8c2b432b31b4fab3ae5dd6dd916f, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: -4.23
+      objectReference: {fileID: 0}
     - target: {fileID: 5370859722707768736, guid: e44b8c2b432b31b4fab3ae5dd6dd916f, type: 3}
       propertyPath: m_Name
       value: CheckpointNPC
       objectReference: {fileID: 0}
     - target: {fileID: 5427672093249980021, guid: e44b8c2b432b31b4fab3ae5dd6dd916f, type: 3}
       propertyPath: m_LocalPosition.x
-      value: 47.375534
+      value: -22.624466
       objectReference: {fileID: 0}
     - target: {fileID: 5427672093249980021, guid: e44b8c2b432b31b4fab3ae5dd6dd916f, type: 3}
       propertyPath: m_LocalPosition.y
@@ -7268,7 +7272,7 @@ GameObject:
   m_Component:
   - component: {fileID: 636792867}
   - component: {fileID: 636792868}
-  m_Layer: 0
+  m_Layer: 10
   m_Name: GameObject
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -9881,7 +9885,7 @@ MonoBehaviour:
     m_Bits: 1
   m_VolumeTrigger: {fileID: 0}
   m_VolumeFrameworkUpdateModeOption: 2
-  m_RenderPostProcessing: 0
+  m_RenderPostProcessing: 1
   m_Antialiasing: 0
   m_AntialiasingQuality: 2
   m_StopNaN: 0
@@ -10090,7 +10094,7 @@ Camera:
   far clip plane: 1000
   field of view: 60
   orthographic: 1
-  orthographic size: 70
+  orthographic size: 66.4
   m_Depth: 0
   m_CullingMask:
     serializedVersion: 2
@@ -10115,7 +10119,7 @@ Transform:
   m_GameObject: {fileID: 1008277427}
   serializedVersion: 2
   m_LocalRotation: {x: 0.7071068, y: 0, z: 0, w: 0.7071068}
-  m_LocalPosition: {x: -94.091156, y: 361.38165, z: 19.159668}
+  m_LocalPosition: {x: -97.2, y: 356.4, z: 9.2}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -11968,7 +11972,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1203837886}
   - component: {fileID: 1203837887}
-  m_Layer: 0
+  m_Layer: 10
   m_Name: GameObject
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -13099,7 +13103,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1384707738}
   - component: {fileID: 1384707739}
-  m_Layer: 0
+  m_Layer: 10
   m_Name: GameObject
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -15054,7 +15058,7 @@ Transform:
   m_GameObject: {fileID: 1581449759}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -74, y: 0, z: -6}
+  m_LocalPosition: {x: -144, y: 0, z: -6}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -15821,7 +15825,7 @@ Transform:
   m_GameObject: {fileID: 1670639890}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -136, y: 0, z: -8}
+  m_LocalPosition: {x: -76, y: 0, z: -8}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -16126,7 +16130,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 5427672093249980021, guid: e44b8c2b432b31b4fab3ae5dd6dd916f, type: 3}
       propertyPath: m_LocalPosition.x
-      value: -20.374466
+      value: 43.47
       objectReference: {fileID: 0}
     - target: {fileID: 5427672093249980021, guid: e44b8c2b432b31b4fab3ae5dd6dd916f, type: 3}
       propertyPath: m_LocalPosition.y
@@ -16134,7 +16138,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 5427672093249980021, guid: e44b8c2b432b31b4fab3ae5dd6dd916f, type: 3}
       propertyPath: m_LocalPosition.z
-      value: -3.820839
+      value: -0.3
       objectReference: {fileID: 0}
     - target: {fileID: 5427672093249980021, guid: e44b8c2b432b31b4fab3ae5dd6dd916f, type: 3}
       propertyPath: m_LocalRotation.w
