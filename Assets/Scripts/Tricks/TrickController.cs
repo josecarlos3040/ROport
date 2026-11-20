@@ -64,6 +64,11 @@ public class TrickController : MonoBehaviour
     [SerializeField]
     private float fallTiltAngle = 60f;
 
+    [Header("Repeat Trick")]
+    [Tooltip("Distancia extra ao redor dos colliders. Impede repetir o F entre dois Approaches.")]
+    [SerializeField, Min(0f)]
+    private float rearmPadding = 2.5f;
+
     [Header("UI")]
     [SerializeField] private TMP_Text hintText;
     [SerializeField] private TMP_Text feedbackText;
@@ -78,18 +83,16 @@ public class TrickController : MonoBehaviour
     private readonly HashSet<TrickZone> traversedZones =
         new HashSet<TrickZone>();
 
-    // Problemas usados durante a partida inteira.
-    private readonly HashSet<TrickZone> consumedCityTricks =
-        new HashSet<TrickZone>();
-
-    // Evita aplicar a mesma falha duas vezes
-    // durante uma rota.
+    // Evita aplicar a mesma falha varias vezes na mesma passagem.
     private readonly HashSet<CityProblem> failedCityProblems =
         new HashSet<CityProblem>();
 
     // Manobras preparadas com F.
     private readonly Dictionary<TrickZone, int> preparedPoints =
         new Dictionary<TrickZone, int>();
+
+    // Lista reutilizada para rearmar zonas apos o Player sair totalmente.
+    private readonly List<TrickZone> zonesToRearm = new List<TrickZone>();
 
     private TrickZone activeZone;
     private Vector3 activeTravelDirection;
@@ -193,6 +196,9 @@ public class TrickController : MonoBehaviour
 
         UpdateTraversal(traversalZone, direction);
 
+        // Libera manobras atravessadas quando o jogador sai da area.
+        RearmExitedZones(feet);
+
         // Nao oferece outra manobra enquanto
         // atravessa uma zona ou esta caindo.
         if (traversalZone != null ||
@@ -251,10 +257,98 @@ public class TrickController : MonoBehaviour
             : null;
     }
 
-    private bool IsCityTrickConsumed(TrickZone zone)
+    // Regiao unica que envolve a travessia e TODOS os Approaches.
+    // Usar a uniao dos colliders impede rearmar no espaco entre
+    // ApproachZone_1 e ApproachZone_2.
+    private bool IsInsideTrickRegion(TrickZone zone, Vector3 feet)
     {
-        return GetCityProblem(zone) != null &&
-               consumedCityTricks.Contains(zone);
+        if (zone == null || !zone.isActiveAndEnabled)
+            return false;
+
+        BoxCollider[] colliders =
+            zone.GetComponentsInChildren<BoxCollider>(true);
+
+        Bounds combined = new Bounds();
+        bool found = false;
+
+        foreach (BoxCollider box in colliders)
+        {
+            if (box == null || !box.enabled ||
+                !box.gameObject.activeInHierarchy)
+                continue;
+
+            if (!found)
+            {
+                combined = box.bounds;
+                found = true;
+            }
+            else
+            {
+                combined.Encapsulate(box.bounds);
+            }
+        }
+
+        if (!found)
+            return zone.IsInTraversal(feet) ||
+                   zone.IsInApproach(feet);
+
+        combined.Expand(rearmPadding * 2f);
+
+        return combined.Contains(feet) ||
+               combined.Contains(character.position);
+    }
+
+    private bool IsInsideProblemRegion(CityProblem problem, Vector3 feet)
+    {
+        if (problem == null || zones == null)
+            return false;
+
+        foreach (TrickZone zone in zones)
+        {
+            if (zone != null && GetCityProblem(zone) == problem &&
+                IsInsideTrickRegion(zone, feet))
+                return true;
+        }
+
+        return false;
+    }
+
+    // Repetir so depois de sair TOTALMENTE da regiao da manobra.
+    // Inclui as duas aproximacoes, a travessia e o espaco entre elas.
+    private void RearmExitedZones(Vector3 feet)
+    {
+        zonesToRearm.Clear();
+
+        foreach (TrickZone zone in attemptedZones)
+        {
+            if (zone != activeZone &&
+                !IsInsideTrickRegion(zone, feet))
+                zonesToRearm.Add(zone);
+        }
+
+        foreach (TrickZone zone in traversedZones)
+        {
+            if (zone != activeZone &&
+                !IsInsideTrickRegion(zone, feet) &&
+                !zonesToRearm.Contains(zone))
+                zonesToRearm.Add(zone);
+        }
+
+        foreach (TrickZone zone in zonesToRearm)
+        {
+            attemptedZones.Remove(zone);
+            traversedZones.Remove(zone);
+            preparedPoints.Remove(zone);
+
+            CityProblem problem = GetCityProblem(zone);
+            if (problem != null &&
+                !IsInsideProblemRegion(problem, feet))
+            {
+                failedCityProblems.Remove(problem);
+            }
+        }
+
+        zonesToRearm.Clear();
     }
 
     // ==================================================
@@ -276,8 +370,7 @@ public class TrickController : MonoBehaviour
             if (zone == null ||
                 !zone.isActiveAndEnabled ||
                 attemptedZones.Contains(zone) ||
-                traversedZones.Contains(zone) ||
-                IsCityTrickConsumed(zone))
+                traversedZones.Contains(zone))
             {
                 continue;
             }
@@ -373,8 +466,7 @@ public class TrickController : MonoBehaviour
         {
             if (zone == null ||
                 !zone.isActiveAndEnabled ||
-                traversedZones.Contains(zone) ||
-                IsCityTrickConsumed(zone))
+                traversedZones.Contains(zone))
             {
                 continue;
             }
@@ -474,10 +566,6 @@ public class TrickController : MonoBehaviour
         traversedZones.Add(zone);
 
         CityProblem problem = GetCityProblem(zone);
-
-        // Problemas urbanos sao usados apenas uma vez.
-        if (problem != null)
-            consumedCityTricks.Add(zone);
 
         activeSuccessful =
             preparedPoints.TryGetValue(zone, out int points);
@@ -593,8 +681,8 @@ public class TrickController : MonoBehaviour
         if (HasProtectedJump(problem))
             return;
 
-        // Consome todas as zonas desse problema.
-        // Mesmo que nao tenha apertado F.
+        // Bloqueia todas as zonas do problema apenas nesta passagem.
+        // Serao liberadas ao sair da area de travessia/aproximacao.
         if (zones != null)
         {
             foreach (TrickZone zone in zones)
@@ -604,7 +692,7 @@ public class TrickController : MonoBehaviour
                     continue;
 
                 attemptedZones.Add(zone);
-                consumedCityTricks.Add(zone);
+                traversedZones.Add(zone);
                 preparedPoints.Remove(zone);
             }
         }
@@ -886,17 +974,17 @@ public class TrickController : MonoBehaviour
             remainingSpeedDuration = 0f;
             extendedSpeedMultiplier = 1f;
 
-            attemptedZones.Clear();
-            traversedZones.Clear();
+            // As zonas continuam bloqueadas enquanto o robo estiver
+            // dentro da regiao dos dois Approaches e da travessia.
+            // Nao limpar attemptedZones/traversedZones automaticamente
+            // ao entrar no planejamento.
             preparedPoints.Clear();
-
-            failedCityProblems.Clear();
-
-            // consumedCityTricks NAO e limpo aqui.
-            // Mantem os problemas usados entre checkpoints.
 
             StopFallAnimation();
             EndTraversal();
+
+            if (character != null)
+                RearmExitedZones(GetFeetPosition());
 
             SetHint("");
 
@@ -920,10 +1008,14 @@ public class TrickController : MonoBehaviour
         }
     }
 
-    // Chamar apenas quando iniciar uma NOVA partida.
+    // Mantido para compatibilidade com outros scripts que ja possam chama-lo.
+    // Agora todas as manobras sao repetiveis; limpa apenas o estado momentaneo.
     public void ResetCityTricksForNewGame()
     {
-        consumedCityTricks.Clear();
+        attemptedZones.Clear();
+        traversedZones.Clear();
+        preparedPoints.Clear();
         failedCityProblems.Clear();
+        zonesToRearm.Clear();
     }
 }

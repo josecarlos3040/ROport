@@ -163,7 +163,6 @@ public class ROportRunManager : MonoBehaviour
 
         if (requireCheckpointToStart)
         {
-            // NOVO:
             // Tenta completar automaticamente
             // a rota ate o checkpoint atual.
             bool connected =

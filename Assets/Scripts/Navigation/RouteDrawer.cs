@@ -241,9 +241,9 @@ public class RouteDrawer : MonoBehaviour
         return checkpoints[currentCheckpointIndex];
     }
 
-    // Chamado pelo RunManager ao apertar Espaco.
-    // Retorna true apenas se a rota puder
-    // ser ligada ao checkpoint atual.
+    // Ao apertar Espaco, termina a rota no checkpoint.
+    // Se o jogador passou pelo checkpoint e desenhou alem,
+    // remove a parte excedente antes de iniciar a execucao.
     public bool TryCompleteToCurrentCheckpoint()
     {
         if (!canEdit || roadNetwork == null)
@@ -256,176 +256,173 @@ public class RouteDrawer : MonoBehaviour
 
         if (checkpoint == null)
         {
-            SendFeedback(
-                "Checkpoint atual nao configurado.");
+            SendFeedback("Checkpoint atual nao configurado.");
             return false;
         }
 
         if (!HasRoute)
         {
-            SendFeedback(
-                "Desenhe uma rota antes de executar.");
+            SendFeedback("Desenhe uma rota antes de executar.");
             return false;
         }
 
-        int lastId =
-            routeNodes[routeNodes.Count - 1];
+        Vector3 target = checkpoint.position;
 
-        Vector3 lastSurface =
-            roadNetwork.GetWorldPosition(lastId);
-
-        Vector3 checkpointPosition =
-            checkpoint.position;
-
-        // Distancia horizontal entre a ponta
-        // do desenho e o checkpoint.
-        Vector2 horizontalDifference = new Vector2(
-            lastSurface.x - checkpointPosition.x,
-            lastSurface.z - checkpointPosition.z);
-
-        float horizontalDistance =
-            horizontalDifference.magnitude;
-
-        float verticalDistance =
-            Mathf.Abs(
-                lastSurface.y -
-                checkpointPosition.y);
-
-        if (horizontalDistance >
-            checkpointSnapRadius)
-        {
-            SendFeedback(
-                "Aproxime o final da rota " +
-                "do checkpoint.");
-            return false;
-        }
-
-        if (verticalDistance >
-            checkpointVerticalTolerance)
-        {
-            SendFeedback(
-                "O checkpoint esta em outro andar.");
-            return false;
-        }
-
-        // Localiza o no da rua mais proximo
-        // do checkpoint.
         if (!roadNetwork.TryFindNearestNode(
-            checkpointPosition,
-            checkpointNodeSearchRadius,
-            out int destinationNode))
+            target, checkpointNodeSearchRadius,
+            out int destinationId))
         {
-            SendFeedback(
-                "Nao encontrei rua perto " +
-                "do checkpoint.");
+            SendFeedback("Nao encontrei rua perto do checkpoint.");
             return false;
         }
 
         Vector3 destinationSurface =
-            roadNetwork.GetWorldPosition(
-                destinationNode);
+            roadNetwork.GetWorldPosition(destinationId);
 
-        if (Mathf.Abs(
-            destinationSurface.y -
-            checkpointPosition.y) >
-            checkpointVerticalTolerance)
-        {
-            SendFeedback(
-                "A rua do checkpoint esta " +
-                "em outro nivel.");
-            return false;
-        }
+        float destinationVerticalDistance =
+            Mathf.Abs(destinationSurface.y - target.y);
 
-        // Evita uma ultima linha muito longa
-        // cortando a calcada ou um predio.
         Vector2 finalDifference = new Vector2(
-            destinationSurface.x -
-                checkpointPosition.x,
-            destinationSurface.z -
-                checkpointPosition.z);
+            destinationSurface.x - target.x,
+            destinationSurface.z - target.z);
 
-        if (finalDifference.magnitude >
-            maxFinalConnection)
+        if (destinationVerticalDistance > checkpointVerticalTolerance)
         {
-            SendFeedback(
-                "Checkpoint longe da rua. " +
-                "Ajuste Max Final Connection.");
+            SendFeedback("A rua do checkpoint esta em outro nivel.");
             return false;
         }
 
-        // Busca uma conexao usando os vizinhos
-        // reais do RoadNetwork.
-        if (!TryBuildAutoPath(
-            lastId,
-            destinationNode,
-            out List<int> extraNodes))
+        if (finalDifference.magnitude > maxFinalConnection)
         {
-            SendFeedback(
-                "Nao foi possivel conectar " +
-                "sem repetir ou cortar ruas.");
+            SendFeedback("Checkpoint longe da rua. Ajuste Max Final Connection.");
             return false;
         }
 
-        if (routeNodes.Count + extraNodes.Count >
-            maxNodes)
+        // Procura uma parte da rota que tenha passado perto do
+        // checkpoint, inclusive se a PONTA atual estiver longe.
+        // Comeca pela primeira aproximacao, para cortar o excesso
+        // do desenho em vez de obrigar o player a percorrer tudo.
+        int chosenIndex = -1;
+        List<int> chosenExtraNodes = null;
+
+        for (int i = 1; i < routeNodes.Count; i++)
+        {
+            Vector3 surface =
+                roadNetwork.GetWorldPosition(routeNodes[i]);
+
+            Vector2 horizontal = new Vector2(
+                surface.x - target.x,
+                surface.z - target.z);
+
+            if (horizontal.magnitude > checkpointSnapRadius ||
+                Mathf.Abs(surface.y - target.y) > checkpointVerticalTolerance)
+            {
+                continue;
+            }
+
+            // Bloqueia somente a parte da rota ANTERIOR ao
+            // candidato. Nos desenhados DEPOIS dele serao apagados.
+            HashSet<int> keptNodes = new HashSet<int>();
+
+            for (int j = 0; j <= i; j++)
+                keptNodes.Add(routeNodes[j]);
+
+            if (!TryBuildAutoPath(
+                routeNodes[i], destinationId, keptNodes,
+                out List<int> extraNodes))
+            {
+                continue;
+            }
+
+            if (i + 1 + extraNodes.Count > maxNodes)
+                continue;
+
+            chosenIndex = i;
+            chosenExtraNodes = extraNodes;
+            break;
+        }
+
+        if (chosenIndex < 0)
         {
             SendFeedback(
-                "Rota excedeu o limite de pontos.");
+                "Desenhe passando perto do checkpoint, " +
+                "na rua correta, e aperte ESPACO.");
             return false;
         }
 
-        // A partir daqui a conexao foi validada.
-        // Agora podemos modificar a rota.
-        foreach (int nodeId in extraNodes)
+        // Os pontos iniciais podem conter a posicao exata do
+        // player e um ponto extra de encaixe no RoadNetwork.
+        int initialPointOffset = points.Count - routeNodes.Count;
+        int pointsToKeep = chosenIndex + 1 + initialPointOffset;
+
+        // Nenhuma alteracao na rota ocorre antes de validar
+        // a conexao. Agora retiramos o trecho que passou do alvo.
+        int routeNodesToKeep = chosenIndex + 1;
+
+        if (routeNodes.Count > routeNodesToKeep)
+        {
+            routeNodes.RemoveRange(
+                routeNodesToKeep,
+                routeNodes.Count - routeNodesToKeep);
+        }
+
+        if (points.Count > pointsToKeep)
+        {
+            points.RemoveRange(
+                pointsToKeep,
+                points.Count - pointsToKeep);
+        }
+
+        visitedNodes.Clear();
+        foreach (int node in routeNodes)
+            visitedNodes.Add(node);
+
+        // Se ainda faltam alguns nos, acrescenta os vizinhos
+        // validos da rua, sem atravessar construcoes.
+        foreach (int nodeId in chosenExtraNodes)
         {
             routeNodes.Add(nodeId);
             visitedNodes.Add(nodeId);
 
-            Vector3 surface =
-                roadNetwork.GetWorldPosition(nodeId);
-
             points.Add(
-                surface +
+                roadNetwork.GetWorldPosition(nodeId) +
                 Vector3.up * playerPivotHeight);
         }
 
-        // Pequena ligacao final ate a posicao
-        // horizontal do checkpoint.
-        // A altura continua sendo a da rua.
+        // Conecta apenas a ultima distancia curta ao checkpoint.
         Vector3 finalPoint = new Vector3(
-            checkpointPosition.x,
+            target.x,
             destinationSurface.y + playerPivotHeight,
-            checkpointPosition.z);
+            target.z);
 
-        Vector3 lastPoint =
-            points[points.Count - 1];
-
-        if (Vector3.Distance(
-            lastPoint, finalPoint) > 0.05f)
+        if (points.Count == 0 ||
+            Vector3.Distance(points[points.Count - 1], finalPoint) > 0.05f)
         {
             points.Add(finalPoint);
         }
 
         completedToCheckpoint = true;
         isDrawing = false;
+        lastFeedback = null;
 
         RefreshLine();
         RouteChanged?.Invoke(routeNodes.Count);
 
         Debug.Log(
-            "[ROport Route] Rota conectada ao " +
+            "[ROport Route] Rota fechada no checkpoint " +
             checkpoint.name +
-            " | Nos adicionados: " +
-            extraNodes.Count);
+            " | Excesso do desenho removido." +
+            " | Nos finais: " + routeNodes.Count);
 
         return true;
     }
 
-    // Encontra um caminho curto no grafo,
-    // sem passar por nos ja utilizados.
+    // Busca o caminho no RoadNetwork evitando o trecho que
+    // continuara desenhado depois do corte.
     private bool TryBuildAutoPath(
         int startId,
         int destinationId,
+        HashSet<int> blockedNodes,
         out List<int> result)
     {
         result = new List<int>();
@@ -433,19 +430,14 @@ public class RouteDrawer : MonoBehaviour
         if (startId == destinationId)
             return true;
 
-        if (visitedNodes.Contains(destinationId))
+        if (blockedNodes.Contains(destinationId))
             return false;
 
         Queue<int> queue = new Queue<int>();
-
-        Dictionary<int, int> parents =
-            new Dictionary<int, int>();
-
-        Dictionary<int, int> depths =
-            new Dictionary<int, int>();
+        Dictionary<int, int> parents = new Dictionary<int, int>();
+        Dictionary<int, int> depths = new Dictionary<int, int>();
 
         queue.Enqueue(startId);
-
         parents[startId] = -1;
         depths[startId] = 0;
 
@@ -461,25 +453,19 @@ public class RouteDrawer : MonoBehaviour
                 break;
             }
 
-            int depth = depths[current];
-
-            if (depth >= maxAutoCompleteNodes)
+            if (depths[current] >= maxAutoCompleteNodes)
                 continue;
 
-            foreach (int neighbor in
-                     roadNetwork.GetNeighbors(current))
+            foreach (int neighbor in roadNetwork.GetNeighbors(current))
             {
-                // Nao visita o mesmo no duas vezes.
-                if (parents.ContainsKey(neighbor))
+                if (parents.ContainsKey(neighbor) ||
+                    blockedNodes.Contains(neighbor))
+                {
                     continue;
-
-                // Nao volta por uma rua ja desenhada.
-                if (visitedNodes.Contains(neighbor))
-                    continue;
+                }
 
                 parents[neighbor] = current;
-                depths[neighbor] = depth + 1;
-
+                depths[neighbor] = depths[current] + 1;
                 queue.Enqueue(neighbor);
             }
         }
@@ -488,7 +474,6 @@ public class RouteDrawer : MonoBehaviour
             return false;
 
         int node = destinationId;
-
         while (node != startId)
         {
             result.Add(node);
@@ -496,7 +481,6 @@ public class RouteDrawer : MonoBehaviour
         }
 
         result.Reverse();
-
         return result.Count <= maxAutoCompleteNodes;
     }
 

@@ -7,8 +7,19 @@ public class SpriteBillboard : MonoBehaviour
 
     [Header("Trick Animation")]
     [SerializeField] private Transform trickRoot;
+
     [SerializeField] private bool simulateTrickSpin = true;
+
     [SerializeField] private SpriteRenderer spriteRenderer;
+
+    [Header("Movement Flip")]
+    [SerializeField] private RouteFollower routeFollower;
+    [SerializeField] private ROportRunManager runManager;
+    [SerializeField] private bool flipWithMovement = true;
+    [Tooltip("Ative se o desenho original olha para a direita da tela.")]
+    [SerializeField] private bool spriteFacesRight = true;
+    [SerializeField, Range(0.01f, 0.8f)]
+    private float horizontalDirectionThreshold = 0.15f;
 
     [SerializeField, Range(0.05f, 1f)]
     private float minimumWidth = 0.12f;
@@ -16,8 +27,15 @@ public class SpriteBillboard : MonoBehaviour
     private Vector3 originalScale;
     private float originalTrickYaw;
     private bool originalFlipX;
+    private bool movementFlip;
 
-    private float extraRoll;
+    private float extraRoll = 0f;
+
+    // Permite que o TrickController incline o sprite.
+    public void SetExtraRoll(float angle)
+    {
+        extraRoll = angle;
+    }
 
     private void Awake()
     {
@@ -26,6 +44,11 @@ public class SpriteBillboard : MonoBehaviour
 
         if (spriteRenderer == null)
             spriteRenderer = GetComponent<SpriteRenderer>();
+
+        if (routeFollower == null)
+            routeFollower = GetComponentInParent<RouteFollower>();
+
+        // RunManager e opcional. Se quiser, atribua no Inspector.
 
         originalScale = transform.localScale;
 
@@ -41,85 +64,91 @@ public class SpriteBillboard : MonoBehaviour
         if (targetCamera == null)
             return;
 
-        UpdateBillboardRotation();
-        UpdateTrickSpin();
-    }
+        // Mantem o Sprite como billboard, sempre olhando para a camera.
+        Vector3 facingDirection = -targetCamera.transform.forward;
+        facingDirection.y = 0f;
 
-    // Mantem o sprite vertical e voltado para a camera.
-    private void UpdateBillboardRotation()
-    {
-        Vector3 direction = -targetCamera.transform.forward;
-
-        // Ignora a inclinacao vertical da camera.
-        direction.y = 0f;
-
-        if (direction.sqrMagnitude < 0.0001f)
-            return;
-
-        Quaternion facingRotation = Quaternion.LookRotation(
-            direction.normalized,
-            Vector3.up);
-
-        // A inclinacao adicional representa
-        // tropeços e quedas durante manobras.
-        Quaternion rollRotation = Quaternion.AngleAxis(
-            extraRoll,
-            Vector3.forward);
-
-        transform.rotation = facingRotation * rollRotation;
-    }
-
-    // Simula o personagem girando de lado
-    // durante uma manobra de 360 graus.
-    private void UpdateTrickSpin()
-    {
-        if (!simulateTrickSpin || trickRoot == null)
+        if (facingDirection.sqrMagnitude > 0.001f)
         {
-            RestoreSpinAppearance();
-            return;
+            transform.rotation = Quaternion.LookRotation(
+                facingDirection.normalized, Vector3.up);
         }
 
-        float yaw = Mathf.DeltaAngle(
-            originalTrickYaw,
-            trickRoot.localEulerAngles.y);
+        // Inclina o sprite durante grind/queda, mesmo sem simular spin.
+        transform.rotation *= Quaternion.AngleAxis(
+            extraRoll, Vector3.forward);
 
-        float widthFactor = Mathf.Cos(
-            yaw * Mathf.Deg2Rad);
+        UpdateMovementFlip();
+
+        // Preserva o efeito de giro ja usado pelas manobras.
+        float widthFactor = 1f;
+        if (simulateTrickSpin && trickRoot != null)
+        {
+            float yaw = Mathf.DeltaAngle(
+                originalTrickYaw, trickRoot.localEulerAngles.y);
+            widthFactor = Mathf.Cos(yaw * Mathf.Deg2Rad);
+        }
 
         float width = Mathf.Max(
-            minimumWidth,
-            Mathf.Abs(widthFactor));
+            minimumWidth, Mathf.Abs(widthFactor));
 
         transform.localScale = new Vector3(
             originalScale.x * width,
             originalScale.y,
             originalScale.z);
 
+        // O espelhamento da movimentacao e do spin sao combinados,
+        // em vez de um sobrescrever o outro a cada frame.
         if (spriteRenderer != null)
         {
+            bool spinFlip =
+                simulateTrickSpin && trickRoot != null &&
+                widthFactor < 0f;
+
             spriteRenderer.flipX =
-                originalFlipX ^ (widthFactor < 0f);
+                originalFlipX ^ movementFlip ^ spinFlip;
         }
     }
 
-    // Usado pelo TrickController
-    // para inclinar o robô durante erros.
-    public void SetExtraRoll(float angle)
+    private void UpdateMovementFlip()
     {
-        extraRoll = angle;
+        if (!flipWithMovement || routeFollower == null ||
+            !routeFollower.IsFollowing)
+            return;
+
+        if (runManager != null &&
+            runManager.Phase != RunPhase.Executing)
+            return;
+
+        Vector3 direction = routeFollower.CurrentMoveDirection;
+        direction.y = 0f;
+        if (direction.sqrMagnitude < 0.0001f)
+            return;
+
+        // Direita na tela, relativa a posicao atual da camera.
+        Vector3 cameraRight = targetCamera.transform.right;
+        cameraRight.y = 0f;
+        if (cameraRight.sqrMagnitude < 0.0001f)
+            return;
+
+        float horizontal = Vector3.Dot(
+            direction.normalized, cameraRight.normalized);
+
+        // Perto de movimentos para frente/tras mantem o ultimo flip.
+        if (Mathf.Abs(horizontal) < horizontalDirectionThreshold)
+            return;
+
+        bool movingLeftOnScreen = horizontal < 0f;
+        movementFlip = spriteFacesRight
+            ? movingLeftOnScreen
+            : !movingLeftOnScreen;
     }
 
-    private void RestoreSpinAppearance()
+    private void OnDisable()
     {
         transform.localScale = originalScale;
 
         if (spriteRenderer != null)
             spriteRenderer.flipX = originalFlipX;
-    }
-
-    private void OnDisable()
-    {
-        extraRoll = 0f;
-        RestoreSpinAppearance();
     }
 }

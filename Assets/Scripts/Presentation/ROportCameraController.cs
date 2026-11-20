@@ -99,6 +99,11 @@ public class ROportCameraController : MonoBehaviour
     [SerializeField]
     private float phonePlanningLookHeight = 1f;
 
+    [Header("Perspective")]
+    [Tooltip("1 = enquadramento equivalente ao antigo Orthographic Size. Maior = mais campo de visao.")]
+    [SerializeField, Range(0.5f, 1.5f)]
+    private float perspectiveZoomMultiplier = 1f;
+
     [Header("Smoothing")]
     [SerializeField, Min(0.01f)]
     private float positionSmoothTime = 0.35f;
@@ -134,7 +139,8 @@ public class ROportCameraController : MonoBehaviour
         if (mainCamera == null)
             mainCamera = GetComponent<Camera>();
 
-        mainCamera.orthographic = true;
+        // Camera principal em perspectiva. O minimapa tem outra camera.
+        mainCamera.orthographic = false;
 
         originalCullingMask = mainCamera.cullingMask;
 
@@ -531,10 +537,27 @@ public class ROportCameraController : MonoBehaviour
             lookTarget - desiredPosition,
             Vector3.up);
 
-        desiredSize = Mathf.Lerp(
+        // Preserva aproximadamente a area visivel do enquadramento antigo,
+        // agora em perspectiva, usando a distancia real ate o alvo.
+        float halfHeight = Mathf.Lerp(
             executionSize,
             upperFloorSize,
             upperFloorBlend);
+
+        desiredSize = ToPerspectiveFov(
+            halfHeight,
+            Vector3.Distance(desiredPosition, lookTarget));
+    }
+
+    // Converte o enquadramento Orthographic Size antigo para FOV.
+    // Isso evita ter que refazer todos os valores do Inspector.
+    private float ToPerspectiveFov(float halfHeight, float distance)
+    {
+        float ratio = halfHeight * perspectiveZoomMultiplier /
+                      Mathf.Max(0.1f, distance);
+
+        float fov = 2f * Mathf.Atan(ratio) * Mathf.Rad2Deg;
+        return Mathf.Clamp(fov, 20f, 100f);
     }
 
     private void UpdateCamera(bool instant)
@@ -552,7 +575,12 @@ public class ROportCameraController : MonoBehaviour
                 out desiredPosition,
                 out desiredRotation);
 
-            desiredSize = phonePlanningSize;
+            Vector3 phoneTarget = GetPlayerGroundPosition() +
+                Vector3.up * phonePlanningLookHeight;
+
+            desiredSize = ToPerspectiveFov(
+                phonePlanningSize,
+                Vector3.Distance(desiredPosition, phoneTarget));
         }
         else
         {
@@ -572,7 +600,7 @@ public class ROportCameraController : MonoBehaviour
                 desiredPosition,
                 desiredRotation);
 
-            mainCamera.orthographicSize = desiredSize;
+            mainCamera.fieldOfView = desiredSize;
 
             positionVelocity = Vector3.zero;
             zoomVelocity = 0f;
@@ -594,9 +622,9 @@ public class ROportCameraController : MonoBehaviour
             desiredRotation,
             rotationFactor);
 
-        mainCamera.orthographicSize =
+        mainCamera.fieldOfView =
             Mathf.SmoothDamp(
-                mainCamera.orthographicSize,
+                mainCamera.fieldOfView,
                 desiredSize,
                 ref zoomVelocity,
                 zoomSmoothTime);
